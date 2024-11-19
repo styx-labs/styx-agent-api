@@ -1,0 +1,2160 @@
+{
+    "id": "fdcab7d9-5e7f-4d95-a310-78ab4b8d595a",
+    "data": {
+        "nodes": [
+            {
+                "id": "SearchAPI-8xIft",
+                "type": "genericNode",
+                "position": {
+                    "x": 623.3366591686051,
+                    "y": 668.2467262271005
+                },
+                "data": {
+                    "id": "SearchAPI-8xIft",
+                    "node": {
+                        "base_classes": [
+                            "Data",
+                            "list",
+                            "Tool"
+                        ],
+                        "beta": false,
+                        "conditional_paths": [],
+                        "custom_fields": {},
+                        "description": "Call the searchapi.io API with result limiting",
+                        "display_name": "Search API",
+                        "documentation": "https://www.searchapi.io/docs/google",
+                        "edited": false,
+                        "field_order": [
+                            "engine",
+                            "api_key",
+                            "input_value",
+                            "search_params"
+                        ],
+                        "frozen": false,
+                        "lf_version": "1.0.19.post1",
+                        "metadata": {},
+                        "official": false,
+                        "output_types": [],
+                        "outputs": [
+                            {
+                                "cache": true,
+                                "display_name": "Data",
+                                "method": "run_model",
+                                "name": "api_run_model",
+                                "required_inputs": [
+                                    "api_key",
+                                    "engine",
+                                    "input_value",
+                                    "max_results",
+                                    "max_snippet_length",
+                                    "search_params"
+                                ],
+                                "selected": "Data",
+                                "types": [
+                                    "Data"
+                                ],
+                                "value": "__UNDEFINED__"
+                            },
+                            {
+                                "cache": true,
+                                "display_name": "Tool",
+                                "method": "build_tool",
+                                "name": "api_build_tool",
+                                "required_inputs": [
+                                    "api_key",
+                                    "engine",
+                                    "input_value",
+                                    "max_results",
+                                    "max_snippet_length",
+                                    "search_params"
+                                ],
+                                "selected": "Tool",
+                                "types": [
+                                    "Tool"
+                                ],
+                                "value": "__UNDEFINED__"
+                            }
+                        ],
+                        "pinned": false,
+                        "template": {
+                            "_type": "Component",
+                            "api_key": {
+                                "_input_type": "SecretStrInput",
+                                "advanced": false,
+                                "display_name": "SearchAPI API Key",
+                                "dynamic": false,
+                                "info": "",
+                                "input_types": [
+                                    "Message"
+                                ],
+                                "load_from_db": false,
+                                "name": "api_key",
+                                "password": true,
+                                "placeholder": "",
+                                "required": true,
+                                "show": true,
+                                "title_case": false,
+                                "type": "str",
+                                "value": "AgPaeR8Di8gtbkqj84TDwhZS"
+                            },
+                            "code": {
+                                "advanced": true,
+                                "dynamic": true,
+                                "fileTypes": [],
+                                "file_path": "",
+                                "info": "",
+                                "list": false,
+                                "load_from_db": false,
+                                "multiline": true,
+                                "name": "code",
+                                "password": false,
+                                "placeholder": "",
+                                "required": true,
+                                "show": true,
+                                "title_case": false,
+                                "type": "code",
+                                "value": "from typing import Any\n\nfrom langchain.tools import StructuredTool\nfrom langchain_community.utilities.searchapi import SearchApiAPIWrapper\nfrom pydantic import BaseModel, Field\n\nfrom langflow.base.langchain_utilities.model import LCToolComponent\nfrom langflow.field_typing import Tool\nfrom langflow.inputs import DictInput, IntInput, MessageTextInput, MultilineInput, SecretStrInput\nfrom langflow.schema import Data\n\n\nclass SearchAPIComponent(LCToolComponent):\n    display_name: str = \"Search API\"\n    description: str = \"Call the searchapi.io API with result limiting\"\n    name = \"SearchAPI\"\n    documentation: str = \"https://www.searchapi.io/docs/google\"\n\n    inputs = [\n        MessageTextInput(name=\"engine\", display_name=\"Engine\", value=\"google\"),\n        SecretStrInput(name=\"api_key\", display_name=\"SearchAPI API Key\", required=True),\n        MultilineInput(\n            name=\"input_value\",\n            display_name=\"Input\",\n        ),\n        DictInput(name=\"search_params\", display_name=\"Search parameters\", advanced=True, is_list=True),\n        IntInput(name=\"max_results\", display_name=\"Max Results\", value=5, advanced=True),\n        IntInput(name=\"max_snippet_length\", display_name=\"Max Snippet Length\", value=100, advanced=True),\n    ]\n\n    class SearchAPISchema(BaseModel):\n        query: str = Field(..., description=\"The search query\")\n        params: dict[str, Any] | None = Field(default_factory=dict, description=\"Additional search parameters\")\n        max_results: int = Field(5, description=\"Maximum number of results to return\")\n        max_snippet_length: int = Field(100, description=\"Maximum length of each result snippet\")\n\n    def _build_wrapper(self):\n        return SearchApiAPIWrapper(engine=self.engine, searchapi_api_key=self.api_key)\n\n    def build_tool(self) -> Tool:\n        wrapper = self._build_wrapper()\n\n        def search_func(\n            query: str, params: dict[str, Any] | None = None, max_results: int = 5, max_snippet_length: int = 100\n        ) -> list[dict[str, Any]]:\n            params = params or {}\n            full_results = wrapper.results(query=query, **params)\n            organic_results = full_results.get(\"organic_results\", [])[:max_results]\n\n            limited_results = []\n            for result in organic_results:\n                limited_result = {\n                    \"title\": result.get(\"title\", \"\")[:max_snippet_length],\n                    \"link\": result.get(\"link\", \"\"),\n                    \"snippet\": result.get(\"snippet\", \"\")[:max_snippet_length],\n                }\n                limited_results.append(limited_result)\n\n            return limited_results\n\n        tool = StructuredTool.from_function(\n            name=\"search_api\",\n            description=\"Search for recent results using searchapi.io with result limiting\",\n            func=search_func,\n            args_schema=self.SearchAPISchema,\n        )\n\n        self.status = f\"Search API Tool created with engine: {self.engine}\"\n        return tool\n\n    def run_model(self) -> list[Data]:\n        tool = self.build_tool()\n        results = tool.run(\n            {\n                \"query\": self.input_value,\n                \"params\": self.search_params or {},\n                \"max_results\": self.max_results,\n                \"max_snippet_length\": self.max_snippet_length,\n            }\n        )\n\n        data_list = [Data(data=result, text=result.get(\"snippet\", \"\")) for result in results]\n\n        self.status = data_list\n        return data_list\n"
+                            },
+                            "engine": {
+                                "_input_type": "MessageTextInput",
+                                "advanced": false,
+                                "display_name": "Engine",
+                                "dynamic": false,
+                                "info": "",
+                                "input_types": [
+                                    "Message"
+                                ],
+                                "list": false,
+                                "load_from_db": false,
+                                "name": "engine",
+                                "placeholder": "",
+                                "required": false,
+                                "show": true,
+                                "title_case": false,
+                                "trace_as_input": true,
+                                "trace_as_metadata": true,
+                                "type": "str",
+                                "value": "google"
+                            },
+                            "input_value": {
+                                "_input_type": "MultilineInput",
+                                "advanced": false,
+                                "display_name": "Input",
+                                "dynamic": false,
+                                "info": "",
+                                "input_types": [
+                                    "Message"
+                                ],
+                                "list": false,
+                                "load_from_db": false,
+                                "multiline": true,
+                                "name": "input_value",
+                                "placeholder": "",
+                                "required": false,
+                                "show": true,
+                                "title_case": false,
+                                "trace_as_input": true,
+                                "trace_as_metadata": true,
+                                "type": "str",
+                                "value": ""
+                            },
+                            "max_results": {
+                                "_input_type": "IntInput",
+                                "advanced": true,
+                                "display_name": "Max Results",
+                                "dynamic": false,
+                                "info": "",
+                                "list": false,
+                                "name": "max_results",
+                                "placeholder": "",
+                                "required": false,
+                                "show": true,
+                                "title_case": false,
+                                "trace_as_metadata": true,
+                                "type": "int",
+                                "value": 5
+                            },
+                            "max_snippet_length": {
+                                "_input_type": "IntInput",
+                                "advanced": true,
+                                "display_name": "Max Snippet Length",
+                                "dynamic": false,
+                                "info": "",
+                                "list": false,
+                                "name": "max_snippet_length",
+                                "placeholder": "",
+                                "required": false,
+                                "show": true,
+                                "title_case": false,
+                                "trace_as_metadata": true,
+                                "type": "int",
+                                "value": 100
+                            },
+                            "search_params": {
+                                "_input_type": "DictInput",
+                                "advanced": true,
+                                "display_name": "Search parameters",
+                                "dynamic": false,
+                                "info": "",
+                                "list": true,
+                                "name": "search_params",
+                                "placeholder": "",
+                                "required": false,
+                                "show": true,
+                                "title_case": false,
+                                "trace_as_input": true,
+                                "type": "dict",
+                                "value": {}
+                            }
+                        }
+                    },
+                    "type": "SearchAPI"
+                },
+                "selected": false,
+                "width": 384,
+                "height": 498,
+                "dragging": false
+            },
+            {
+                "id": "url_content_fetcher-bDGCl",
+                "type": "genericNode",
+                "position": {
+                    "x": 564.4374730601753,
+                    "y": 1287.4047669446686
+                },
+                "data": {
+                    "id": "url_content_fetcher-bDGCl",
+                    "node": {
+                        "base_classes": [
+                            "Data",
+                            "list",
+                            "Tool"
+                        ],
+                        "beta": false,
+                        "conditional_paths": [],
+                        "custom_fields": {},
+                        "description": "Fetch content from a single URL.",
+                        "display_name": "URL Content Fetcher",
+                        "documentation": "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/web_base",
+                        "edited": true,
+                        "field_order": [
+                            "url",
+                            "fetch_params"
+                        ],
+                        "frozen": false,
+                        "icon": "globe",
+                        "lf_version": "1.0.19.post1",
+                        "official": false,
+                        "output_types": [],
+                        "outputs": [
+                            {
+                                "cache": true,
+                                "display_name": "Data",
+                                "method": "run_model",
+                                "name": "api_run_model",
+                                "selected": "Data",
+                                "types": [
+                                    "Data",
+                                    "list"
+                                ],
+                                "value": "__UNDEFINED__"
+                            },
+                            {
+                                "cache": true,
+                                "display_name": "Tool",
+                                "method": "build_tool",
+                                "name": "api_build_tool",
+                                "selected": "Tool",
+                                "types": [
+                                    "Tool"
+                                ],
+                                "value": "__UNDEFINED__"
+                            }
+                        ],
+                        "pinned": false,
+                        "template": {
+                            "_type": "Component",
+                            "code": {
+                                "advanced": true,
+                                "dynamic": true,
+                                "fileTypes": [],
+                                "file_path": "",
+                                "info": "",
+                                "list": false,
+                                "load_from_db": false,
+                                "multiline": true,
+                                "name": "code",
+                                "password": false,
+                                "placeholder": "",
+                                "required": true,
+                                "show": true,
+                                "title_case": false,
+                                "type": "code",
+                                "value": "from typing import Union, Optional\r\nfrom langchain_community.document_loaders.web_base import WebBaseLoader\r\nfrom langflow.base.langchain_utilities.model import LCToolComponent\r\nfrom langflow.inputs import MessageTextInput, DictInput\r\nfrom langflow.schema import Data\r\nfrom langflow.field_typing import Tool\r\nfrom langchain.tools import StructuredTool\r\nfrom pydantic import BaseModel, Field\r\n\r\nclass URLToolComponent(LCToolComponent):\r\n    display_name: str = \"URL Content Fetcher\"\r\n    description: str = \"Fetch content from a single URL.\"\r\n    name = \"url_content_fetcher\"\r\n    documentation: str = \"https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/web_base\"\r\n    icon=\"globe\"\r\n    \r\n    inputs = [\r\n        MessageTextInput(\r\n            name=\"url\",\r\n            display_name=\"URL\",\r\n            info=\"Enter a single URL to fetch content from.\",\r\n        ),\r\n        DictInput(name=\"fetch_params\", display_name=\"Fetch parameters\", advanced=True, is_list=True),\r\n    ]\r\n\r\n    class URLContentFetcherSchema(BaseModel):\r\n        url: str = Field(..., description=\"The URL to fetch content from\")\r\n        fetch_params: Optional[dict] = Field(default=None, description=\"Additional parameters for fetching\")\r\n\r\n    def run_model(self) -> Union[Data, list[Data]]:\r\n        wrapper = self._build_wrapper()\r\n        content = wrapper.load()[0]\r\n        data = Data(data={\"content\": content.page_content, \"metadata\": content.metadata}, \r\n                    text=content.page_content[:500])\r\n        self.status = data\r\n        return data\r\n\r\n    def build_tool(self) -> Tool:\r\n        return StructuredTool.from_function(\r\n            name=\"url_content_fetcher\",\r\n            description=\"Fetch content from a single URL. Input should be a URL string only.\",\r\n            func=self._fetch_url_content,\r\n            args_schema=self.URLContentFetcherSchema,\r\n        )\r\n\r\n    def _build_wrapper(self):\r\n        return WebBaseLoader(web_paths=[self.url], encoding=\"utf-8\", **self.fetch_params or {})\r\n\r\n    def _fetch_url_content(self, url: str, fetch_params: Optional[dict] = None) -> dict:\r\n        loader = WebBaseLoader(web_paths=[url], encoding=\"utf-8\", **(fetch_params or {}))\r\n        content = loader.load()[0]\r\n        return {\r\n            \"content\": content.page_content,\r\n            \"metadata\": content.metadata\r\n        }"
+                            },
+                            "fetch_params": {
+                                "_input_type": "DictInput",
+                                "advanced": true,
+                                "display_name": "Fetch parameters",
+                                "dynamic": false,
+                                "info": "",
+                                "list": true,
+                                "name": "fetch_params",
+                                "placeholder": "",
+                                "required": false,
+                                "show": true,
+                                "title_case": false,
+                                "trace_as_input": true,
+                                "type": "dict",
+                                "value": {}
+                            },
+                            "url": {
+                                "_input_type": "MessageTextInput",
+                                "advanced": false,
+                                "display_name": "URL",
+                                "dynamic": false,
+                                "info": "Enter a single URL to fetch content from.",
+                                "input_types": [
+                                    "Message"
+                                ],
+                                "list": false,
+                                "load_from_db": false,
+                                "name": "url",
+                                "placeholder": "",
+                                "required": false,
+                                "show": true,
+                                "title_case": false,
+                                "trace_as_input": true,
+                                "trace_as_metadata": true,
+                                "type": "str",
+                                "value": ""
+                            }
+                        }
+                    },
+                    "type": "url_content_fetcher"
+                },
+                "selected": false,
+                "width": 384,
+                "height": 327,
+                "positionAbsolute": {
+                    "x": 564.4374730601753,
+                    "y": 1287.4047669446686
+                },
+                "dragging": false
+            },
+            {
+                "id": "ToolCallingAgent-5Q0Er",
+                "type": "genericNode",
+                "position": {
+                    "x": 1952.162957451739,
+                    "y": 1277.0626808400398
+                },
+                "data": {
+                    "type": "ToolCallingAgent",
+                    "node": {
+                        "template": {
+                            "_type": "Component",
+                            "chat_history": {
+                                "trace_as_metadata": true,
+                                "list": true,
+                                "trace_as_input": true,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "chat_history",
+                                "value": "",
+                                "display_name": "Chat History",
+                                "advanced": true,
+                                "input_types": [
+                                    "Data"
+                                ],
+                                "dynamic": false,
+                                "info": "",
+                                "title_case": false,
+                                "type": "other",
+                                "_input_type": "DataInput"
+                            },
+                            "llm": {
+                                "trace_as_metadata": true,
+                                "list": false,
+                                "required": true,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "llm",
+                                "value": "",
+                                "display_name": "Language Model",
+                                "advanced": false,
+                                "input_types": [
+                                    "LanguageModel"
+                                ],
+                                "dynamic": false,
+                                "info": "",
+                                "title_case": false,
+                                "type": "other",
+                                "_input_type": "HandleInput"
+                            },
+                            "tools": {
+                                "trace_as_metadata": true,
+                                "list": true,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "tools",
+                                "value": "",
+                                "display_name": "Tools",
+                                "advanced": false,
+                                "input_types": [
+                                    "Tool",
+                                    "BaseTool"
+                                ],
+                                "dynamic": false,
+                                "info": "",
+                                "title_case": false,
+                                "type": "other",
+                                "_input_type": "HandleInput"
+                            },
+                            "code": {
+                                "type": "code",
+                                "required": true,
+                                "placeholder": "",
+                                "list": false,
+                                "show": true,
+                                "multiline": true,
+                                "value": "from langchain.agents import create_tool_calling_agent\nfrom langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate, PromptTemplate\n\nfrom langflow.base.agents.agent import LCToolsAgentComponent\nfrom langflow.inputs import MultilineInput\nfrom langflow.inputs.inputs import DataInput, HandleInput\nfrom langflow.schema import Data\n\n\nclass ToolCallingAgentComponent(LCToolsAgentComponent):\n    display_name: str = \"Tool Calling Agent\"\n    description: str = \"Agent that uses tools\"\n    icon = \"LangChain\"\n    beta = True\n    name = \"ToolCallingAgent\"\n\n    inputs = [\n        *LCToolsAgentComponent._base_inputs,\n        HandleInput(name=\"llm\", display_name=\"Language Model\", input_types=[\"LanguageModel\"], required=True),\n        MultilineInput(\n            name=\"system_prompt\",\n            display_name=\"System Prompt\",\n            info=\"System prompt for the agent.\",\n            value=\"You are a helpful assistant\",\n        ),\n        MultilineInput(\n            name=\"user_prompt\", display_name=\"Prompt\", info=\"This prompt must contain 'input' key.\", value=\"{input}\"\n        ),\n        DataInput(name=\"chat_history\", display_name=\"Chat History\", is_list=True, advanced=True),\n    ]\n\n    def get_chat_history_data(self) -> list[Data] | None:\n        return self.chat_history\n\n    def create_agent_runnable(self):\n        if \"input\" not in self.user_prompt:\n            msg = \"Prompt must contain 'input' key.\"\n            raise ValueError(msg)\n        messages = [\n            (\"system\", self.system_prompt),\n            (\"placeholder\", \"{chat_history}\"),\n            HumanMessagePromptTemplate(prompt=PromptTemplate(input_variables=[\"input\"], template=self.user_prompt)),\n            (\"placeholder\", \"{agent_scratchpad}\"),\n        ]\n        prompt = ChatPromptTemplate.from_messages(messages)\n        return create_tool_calling_agent(self.llm, self.tools, prompt)\n",
+                                "fileTypes": [],
+                                "file_path": "",
+                                "password": false,
+                                "name": "code",
+                                "advanced": true,
+                                "dynamic": true,
+                                "info": "",
+                                "load_from_db": false,
+                                "title_case": false
+                            },
+                            "handle_parsing_errors": {
+                                "trace_as_metadata": true,
+                                "list": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "handle_parsing_errors",
+                                "value": true,
+                                "display_name": "Handle Parse Errors",
+                                "advanced": true,
+                                "dynamic": false,
+                                "info": "",
+                                "title_case": false,
+                                "type": "bool",
+                                "_input_type": "BoolInput"
+                            },
+                            "input_value": {
+                                "trace_as_input": true,
+                                "trace_as_metadata": true,
+                                "load_from_db": false,
+                                "list": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "input_value",
+                                "value": "",
+                                "display_name": "Input",
+                                "advanced": false,
+                                "input_types": [
+                                    "Message"
+                                ],
+                                "dynamic": false,
+                                "info": "",
+                                "title_case": false,
+                                "type": "str",
+                                "_input_type": "MessageTextInput"
+                            },
+                            "max_iterations": {
+                                "trace_as_metadata": true,
+                                "list": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "max_iterations",
+                                "value": 15,
+                                "display_name": "Max Iterations",
+                                "advanced": true,
+                                "dynamic": false,
+                                "info": "",
+                                "title_case": false,
+                                "type": "int",
+                                "_input_type": "IntInput"
+                            },
+                            "system_prompt": {
+                                "trace_as_input": true,
+                                "multiline": true,
+                                "trace_as_metadata": true,
+                                "load_from_db": false,
+                                "list": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "system_prompt",
+                                "value": "You are a highly skilled recruiter specialized in tech recruiting for young talent. You will be given a list of candidates and a job description. Your task is to find as much information about the candidate as possible that is relevant to the job. You should find things about companies they've worked for, projects they've worked on, the schools they went to, their involvements and extracurriculars at those school, etc. For each candidate, please use the tools available to you to to find this information.",
+                                "display_name": "System Prompt",
+                                "advanced": false,
+                                "input_types": [
+                                    "Message"
+                                ],
+                                "dynamic": false,
+                                "info": "System prompt for the agent.",
+                                "title_case": false,
+                                "type": "str",
+                                "_input_type": "MultilineInput"
+                            },
+                            "user_prompt": {
+                                "trace_as_input": true,
+                                "multiline": true,
+                                "trace_as_metadata": true,
+                                "load_from_db": false,
+                                "list": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "user_prompt",
+                                "value": "{input}",
+                                "display_name": "Prompt",
+                                "advanced": false,
+                                "input_types": [
+                                    "Message"
+                                ],
+                                "dynamic": false,
+                                "info": "This prompt must contain 'input' key.",
+                                "title_case": false,
+                                "type": "str",
+                                "_input_type": "MultilineInput"
+                            },
+                            "verbose": {
+                                "trace_as_metadata": true,
+                                "list": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "verbose",
+                                "value": true,
+                                "display_name": "Verbose",
+                                "advanced": true,
+                                "dynamic": false,
+                                "info": "",
+                                "title_case": false,
+                                "type": "bool",
+                                "_input_type": "BoolInput"
+                            }
+                        },
+                        "description": "Agent that uses tools",
+                        "icon": "LangChain",
+                        "base_classes": [
+                            "AgentExecutor",
+                            "Message"
+                        ],
+                        "display_name": "Tool Calling Agent",
+                        "documentation": "",
+                        "custom_fields": {},
+                        "output_types": [],
+                        "pinned": false,
+                        "conditional_paths": [],
+                        "frozen": false,
+                        "outputs": [
+                            {
+                                "types": [
+                                    "AgentExecutor"
+                                ],
+                                "selected": "AgentExecutor",
+                                "name": "agent",
+                                "display_name": "Agent",
+                                "method": "build_agent",
+                                "value": "__UNDEFINED__",
+                                "cache": true,
+                                "required_inputs": [
+                                    "tools"
+                                ]
+                            },
+                            {
+                                "types": [
+                                    "Message"
+                                ],
+                                "selected": "Message",
+                                "name": "response",
+                                "display_name": "Response",
+                                "method": "message_response",
+                                "value": "__UNDEFINED__",
+                                "cache": true,
+                                "required_inputs": []
+                            }
+                        ],
+                        "field_order": [
+                            "input_value",
+                            "handle_parsing_errors",
+                            "verbose",
+                            "max_iterations",
+                            "tools",
+                            "llm",
+                            "system_prompt",
+                            "user_prompt",
+                            "chat_history"
+                        ],
+                        "beta": true,
+                        "edited": false,
+                        "metadata": {},
+                        "lf_version": "1.0.19.post1"
+                    },
+                    "id": "ToolCallingAgent-5Q0Er"
+                },
+                "selected": false,
+                "width": 384,
+                "height": 594,
+                "dragging": false
+            },
+            {
+                "id": "CustomComponent-W7bsk",
+                "type": "genericNode",
+                "position": {
+                    "x": 619.0272215510502,
+                    "y": 159.62813926936525
+                },
+                "data": {
+                    "type": "CustomComponent",
+                    "node": {
+                        "template": {
+                            "_type": "Component",
+                            "code": {
+                                "type": "code",
+                                "required": true,
+                                "placeholder": "",
+                                "list": false,
+                                "show": true,
+                                "multiline": true,
+                                "value": "# from langflow.field_typing import Data\nfrom langflow.custom import Component\nfrom langflow.io import MessageTextInput, Output\nfrom langflow.schema import Data\nfrom langflow.schema.message import Message\n\n\nclass CustomComponent(Component):\n    display_name = \"Custom Component\"\n    description = \"Use as a template to create your own component.\"\n    documentation: str = \"http://docs.langflow.org/components/custom\"\n    icon = \"custom_components\"\n    name = \"CustomComponent\"\n\n    inputs = [\n        MessageTextInput(name=\"input_value\", display_name=\"Input Value\", value=\"Hello, World!\"),\n    ]\n\n    outputs = [\n        Output(display_name=\"Output\", name=\"output\", method=\"build_output\"),\n    ]\n\n    def build_output(self) -> Message:\n        description = self.input_value\n        tokens = description.split()\n        s = \"https://vector-search-db-16250094868.us-central1.run.app/?description=\"\n        for t in tokens:\n            s += t + \"+\"\n        return Message(text=s[:-1])\n",
+                                "fileTypes": [],
+                                "file_path": "",
+                                "password": false,
+                                "name": "code",
+                                "advanced": true,
+                                "dynamic": true,
+                                "info": "",
+                                "load_from_db": false,
+                                "title_case": false
+                            },
+                            "input_value": {
+                                "trace_as_input": true,
+                                "trace_as_metadata": true,
+                                "load_from_db": false,
+                                "list": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "input_value",
+                                "value": "",
+                                "display_name": "Input Value",
+                                "advanced": false,
+                                "input_types": [
+                                    "Message"
+                                ],
+                                "dynamic": false,
+                                "info": "",
+                                "title_case": false,
+                                "type": "str",
+                                "_input_type": "MessageTextInput"
+                            }
+                        },
+                        "description": "Use as a template to create your own component.",
+                        "icon": "custom_components",
+                        "base_classes": [
+                            "Message"
+                        ],
+                        "display_name": "Custom Component",
+                        "documentation": "http://docs.langflow.org/components/custom",
+                        "custom_fields": {},
+                        "output_types": [],
+                        "pinned": false,
+                        "conditional_paths": [],
+                        "frozen": false,
+                        "outputs": [
+                            {
+                                "types": [
+                                    "Message"
+                                ],
+                                "selected": "Message",
+                                "name": "output",
+                                "display_name": "Output",
+                                "method": "build_output",
+                                "value": "__UNDEFINED__",
+                                "cache": true
+                            }
+                        ],
+                        "field_order": [
+                            "input_value"
+                        ],
+                        "beta": false,
+                        "edited": true,
+                        "metadata": {},
+                        "lf_version": "1.0.19.post1"
+                    },
+                    "id": "CustomComponent-W7bsk"
+                },
+                "selected": false,
+                "width": 384,
+                "height": 303
+            },
+            {
+                "id": "URL-YhNkF",
+                "type": "genericNode",
+                "position": {
+                    "x": 1100.082851532149,
+                    "y": 55
+                },
+                "data": {
+                    "type": "URL",
+                    "node": {
+                        "template": {
+                            "_type": "Component",
+                            "code": {
+                                "type": "code",
+                                "required": true,
+                                "placeholder": "",
+                                "list": false,
+                                "show": true,
+                                "multiline": true,
+                                "value": "import re\n\nfrom langchain_community.document_loaders import AsyncHtmlLoader, WebBaseLoader\n\nfrom langflow.custom import Component\nfrom langflow.helpers.data import data_to_text\nfrom langflow.io import DropdownInput, MessageTextInput, Output\nfrom langflow.schema import Data\nfrom langflow.schema.message import Message\n\n\nclass URLComponent(Component):\n    display_name = \"URL\"\n    description = \"Fetch content from one or more URLs.\"\n    icon = \"layout-template\"\n    name = \"URL\"\n\n    inputs = [\n        MessageTextInput(\n            name=\"urls\",\n            display_name=\"URLs\",\n            info=\"Enter one or more URLs, by clicking the '+' button.\",\n            is_list=True,\n        ),\n        DropdownInput(\n            name=\"format\",\n            display_name=\"Output format\",\n            info=\"Output format. Use 'Text' to extract the text from the HTML or 'Raw HTML' for the raw HTML content.\",\n            options=[\"Text\", \"Raw HTML\"],\n            value=\"Text\",\n        ),\n    ]\n\n    outputs = [\n        Output(display_name=\"Data\", name=\"data\", method=\"fetch_content\"),\n        Output(display_name=\"Text\", name=\"text\", method=\"fetch_content_text\"),\n    ]\n\n    def ensure_url(self, string: str) -> str:\n        \"\"\"\n        Ensures the given string is a URL by adding 'http://' if it doesn't start with 'http://' or 'https://'.\n        Raises an error if the string is not a valid URL.\n\n        Parameters:\n            string (str): The string to be checked and possibly modified.\n\n        Returns:\n            str: The modified string that is ensured to be a URL.\n\n        Raises:\n            ValueError: If the string is not a valid URL.\n        \"\"\"\n        if not string.startswith((\"http://\", \"https://\")):\n            string = \"http://\" + string\n\n        # Basic URL validation regex\n        # url_regex = re.compile(\n        #     r\"^(https?:\\/\\/)?\"  # optional protocol\n        #     r\"(www\\.)?\"  # optional www\n        #     r\"([a-zA-Z0-9.-]+)\"  # domain\n        #     r\"(\\.[a-zA-Z]{2,})?\"  # top-level domain\n        #     r\"(:\\d+)?\"  # optional port\n        #     r\"(\\/[^\\s]*)?$\",  # optional path\n        #     re.IGNORECASE,\n        # )\n\n        # if not url_regex.match(string):\n        #     msg = f\"Invalid URL: {string}\"\n        #     raise ValueError(msg)\n\n        return string\n\n    def fetch_content(self) -> list[Data]:\n        urls = [self.ensure_url(url.strip()) for url in self.urls if url.strip()]\n        if self.format == \"Raw HTML\":\n            loader = AsyncHtmlLoader(web_path=urls, encoding=\"utf-8\")\n        else:\n            loader = WebBaseLoader(web_paths=urls, encoding=\"utf-8\")\n        docs = loader.load()\n        data = [Data(text=doc.page_content, **doc.metadata) for doc in docs]\n        self.status = data\n        return data\n\n    def fetch_content_text(self) -> Message:\n        data = self.fetch_content()\n\n        result_string = data_to_text(\"{text}\", data)\n        self.status = result_string\n        return Message(text=result_string)\n",
+                                "fileTypes": [],
+                                "file_path": "",
+                                "password": false,
+                                "name": "code",
+                                "advanced": true,
+                                "dynamic": true,
+                                "info": "",
+                                "load_from_db": false,
+                                "title_case": false
+                            },
+                            "format": {
+                                "trace_as_metadata": true,
+                                "options": [
+                                    "Text",
+                                    "Raw HTML"
+                                ],
+                                "combobox": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "format",
+                                "value": "Text",
+                                "display_name": "Output format",
+                                "advanced": false,
+                                "dynamic": false,
+                                "info": "Output format. Use 'Text' to extract the text from the HTML or 'Raw HTML' for the raw HTML content.",
+                                "title_case": false,
+                                "type": "str",
+                                "_input_type": "DropdownInput"
+                            },
+                            "urls": {
+                                "trace_as_input": true,
+                                "trace_as_metadata": true,
+                                "load_from_db": false,
+                                "list": true,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "urls",
+                                "value": "",
+                                "display_name": "URLs",
+                                "advanced": false,
+                                "input_types": [
+                                    "Message"
+                                ],
+                                "dynamic": false,
+                                "info": "Enter one or more URLs, by clicking the '+' button.",
+                                "title_case": false,
+                                "type": "str",
+                                "_input_type": "MessageTextInput"
+                            }
+                        },
+                        "description": "Fetch content from one or more URLs.",
+                        "icon": "layout-template",
+                        "base_classes": [
+                            "Data",
+                            "Message"
+                        ],
+                        "display_name": "URL",
+                        "documentation": "",
+                        "custom_fields": {},
+                        "output_types": [],
+                        "pinned": false,
+                        "conditional_paths": [],
+                        "frozen": false,
+                        "outputs": [
+                            {
+                                "types": [
+                                    "Data"
+                                ],
+                                "selected": "Data",
+                                "name": "data",
+                                "display_name": "Data",
+                                "method": "fetch_content",
+                                "value": "__UNDEFINED__",
+                                "cache": true
+                            },
+                            {
+                                "types": [
+                                    "Message"
+                                ],
+                                "selected": "Message",
+                                "name": "text",
+                                "display_name": "Text",
+                                "method": "fetch_content_text",
+                                "value": "__UNDEFINED__",
+                                "cache": true
+                            }
+                        ],
+                        "field_order": [
+                            "urls",
+                            "format"
+                        ],
+                        "beta": false,
+                        "edited": true,
+                        "metadata": {},
+                        "lf_version": "1.0.19.post1"
+                    },
+                    "id": "URL-YhNkF"
+                },
+                "selected": false,
+                "width": 384,
+                "height": 413
+            },
+            {
+                "id": "Prompt-W93bF",
+                "type": "genericNode",
+                "position": {
+                    "x": 1580.0796883370501,
+                    "y": 326.52664409484527
+                },
+                "data": {
+                    "type": "Prompt",
+                    "node": {
+                        "template": {
+                            "_type": "Component",
+                            "code": {
+                                "type": "code",
+                                "required": true,
+                                "placeholder": "",
+                                "list": false,
+                                "show": true,
+                                "multiline": true,
+                                "value": "from langflow.base.prompts.api_utils import process_prompt_template\nfrom langflow.custom import Component\nfrom langflow.inputs.inputs import DefaultPromptField\nfrom langflow.io import Output, PromptInput\nfrom langflow.schema.message import Message\nfrom langflow.template.utils import update_template_values\n\n\nclass PromptComponent(Component):\n    display_name: str = \"Prompt\"\n    description: str = \"Create a prompt template with dynamic variables.\"\n    icon = \"prompts\"\n    trace_type = \"prompt\"\n    name = \"Prompt\"\n\n    inputs = [\n        PromptInput(name=\"template\", display_name=\"Template\"),\n    ]\n\n    outputs = [\n        Output(display_name=\"Prompt Message\", name=\"prompt\", method=\"build_prompt\"),\n    ]\n\n    async def build_prompt(\n        self,\n    ) -> Message:\n        prompt = await Message.from_template_and_variables(**self._attributes)\n        self.status = prompt.text\n        return prompt\n\n    def _update_template(self, frontend_node: dict):\n        prompt_template = frontend_node[\"template\"][\"template\"][\"value\"]\n        custom_fields = frontend_node[\"custom_fields\"]\n        frontend_node_template = frontend_node[\"template\"]\n        _ = process_prompt_template(\n            template=prompt_template,\n            name=\"template\",\n            custom_fields=custom_fields,\n            frontend_node_template=frontend_node_template,\n        )\n        return frontend_node\n\n    def post_code_processing(self, new_frontend_node: dict, current_frontend_node: dict):\n        \"\"\"\n        This function is called after the code validation is done.\n        \"\"\"\n        frontend_node = super().post_code_processing(new_frontend_node, current_frontend_node)\n        template = frontend_node[\"template\"][\"template\"][\"value\"]\n        # Kept it duplicated for backwards compatibility\n        _ = process_prompt_template(\n            template=template,\n            name=\"template\",\n            custom_fields=frontend_node[\"custom_fields\"],\n            frontend_node_template=frontend_node[\"template\"],\n        )\n        # Now that template is updated, we need to grab any values that were set in the current_frontend_node\n        # and update the frontend_node with those values\n        update_template_values(new_template=frontend_node, previous_template=current_frontend_node[\"template\"])\n        return frontend_node\n\n    def _get_fallback_input(self, **kwargs):\n        return DefaultPromptField(**kwargs)\n",
+                                "fileTypes": [],
+                                "file_path": "",
+                                "password": false,
+                                "name": "code",
+                                "advanced": true,
+                                "dynamic": true,
+                                "info": "",
+                                "load_from_db": false,
+                                "title_case": false
+                            },
+                            "template": {
+                                "trace_as_input": true,
+                                "list": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "template",
+                                "value": "You are a highly skilled recruiter specialized in tech recruiting for young talent. You will be given a job description and a list of weakly filtered candidates. Each candidate has a brief description associated with them. Your job is to return a subset of the {n} candidates that best fit the job description. Please only return a list with each candidates full name as well as a brief summary of relevant information about them in this format:\n1. Full Name - Other relevant info\n2. Full Name - Other relevant info\n3. Full Name - Other relevant info\n4. Full Name - Other relevant info\n5. Full Name - Other relevant info\nReturn no other text.\n\nHere is the job description:\n{job_description}\n\nAnd here is the list of candidates:\n{candidates}",
+                                "display_name": "Template",
+                                "advanced": false,
+                                "dynamic": false,
+                                "info": "",
+                                "title_case": false,
+                                "type": "prompt",
+                                "_input_type": "PromptInput"
+                            },
+                            "candidates": {
+                                "field_type": "str",
+                                "required": false,
+                                "placeholder": "",
+                                "list": false,
+                                "show": true,
+                                "multiline": true,
+                                "value": "",
+                                "fileTypes": [],
+                                "file_path": "",
+                                "name": "candidates",
+                                "display_name": "candidates",
+                                "advanced": false,
+                                "input_types": [
+                                    "Message",
+                                    "Text"
+                                ],
+                                "dynamic": false,
+                                "info": "",
+                                "load_from_db": false,
+                                "title_case": false,
+                                "type": "str"
+                            },
+                            "job_description": {
+                                "field_type": "str",
+                                "required": false,
+                                "placeholder": "",
+                                "list": false,
+                                "show": true,
+                                "multiline": true,
+                                "value": "",
+                                "fileTypes": [],
+                                "file_path": "",
+                                "name": "job_description",
+                                "display_name": "job_description",
+                                "advanced": false,
+                                "input_types": [
+                                    "Message",
+                                    "Text"
+                                ],
+                                "dynamic": false,
+                                "info": "",
+                                "load_from_db": false,
+                                "title_case": false,
+                                "type": "str"
+                            },
+                            "n": {
+                                "field_type": "str",
+                                "required": false,
+                                "placeholder": "",
+                                "list": false,
+                                "show": true,
+                                "multiline": true,
+                                "value": "",
+                                "fileTypes": [],
+                                "file_path": "",
+                                "name": "n",
+                                "display_name": "n",
+                                "advanced": false,
+                                "input_types": [
+                                    "Message",
+                                    "Text"
+                                ],
+                                "dynamic": false,
+                                "info": "",
+                                "load_from_db": false,
+                                "title_case": false,
+                                "type": "str"
+                            }
+                        },
+                        "description": "Create a prompt template with dynamic variables.",
+                        "icon": "prompts",
+                        "is_input": null,
+                        "is_output": null,
+                        "is_composition": null,
+                        "base_classes": [
+                            "Message"
+                        ],
+                        "name": "",
+                        "display_name": "Prompt",
+                        "documentation": "",
+                        "custom_fields": {
+                            "template": [
+                                "n",
+                                "job_description",
+                                "candidates"
+                            ]
+                        },
+                        "output_types": [],
+                        "full_path": null,
+                        "pinned": false,
+                        "conditional_paths": [],
+                        "frozen": false,
+                        "outputs": [
+                            {
+                                "types": [
+                                    "Message"
+                                ],
+                                "selected": "Message",
+                                "name": "prompt",
+                                "hidden": null,
+                                "display_name": "Prompt Message",
+                                "method": "build_prompt",
+                                "value": "__UNDEFINED__",
+                                "cache": true,
+                                "required_inputs": null
+                            }
+                        ],
+                        "field_order": [
+                            "template"
+                        ],
+                        "beta": false,
+                        "error": null,
+                        "edited": false,
+                        "metadata": {},
+                        "lf_version": "1.0.19.post1"
+                    },
+                    "id": "Prompt-W93bF"
+                },
+                "selected": false,
+                "width": 384,
+                "height": 559
+            },
+            {
+                "id": "TextInput-Mijxy",
+                "type": "genericNode",
+                "position": {
+                    "x": 70.75827350727172,
+                    "y": 711.0704477061472
+                },
+                "data": {
+                    "type": "TextInput",
+                    "node": {
+                        "template": {
+                            "_type": "Component",
+                            "code": {
+                                "type": "code",
+                                "required": true,
+                                "placeholder": "",
+                                "list": false,
+                                "show": true,
+                                "multiline": true,
+                                "value": "from langflow.base.io.text import TextComponent\nfrom langflow.io import MultilineInput, Output\nfrom langflow.schema.message import Message\n\n\nclass TextInputComponent(TextComponent):\n    display_name = \"Text Input\"\n    description = \"Get text inputs from the Playground.\"\n    icon = \"type\"\n    name = \"TextInput\"\n\n    inputs = [\n        MultilineInput(\n            name=\"input_value\",\n            display_name=\"Text\",\n            info=\"Text to be passed as input.\",\n        ),\n    ]\n    outputs = [\n        Output(display_name=\"Text\", name=\"text\", method=\"text_response\"),\n    ]\n\n    def text_response(self) -> Message:\n        return Message(\n            text=self.input_value,\n        )\n",
+                                "fileTypes": [],
+                                "file_path": "",
+                                "password": false,
+                                "name": "code",
+                                "advanced": true,
+                                "dynamic": true,
+                                "info": "",
+                                "load_from_db": false,
+                                "title_case": false
+                            },
+                            "input_value": {
+                                "trace_as_input": true,
+                                "multiline": true,
+                                "trace_as_metadata": true,
+                                "load_from_db": false,
+                                "list": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "input_value",
+                                "value": "3",
+                                "display_name": "Text",
+                                "advanced": false,
+                                "input_types": [
+                                    "Message"
+                                ],
+                                "dynamic": false,
+                                "info": "Text to be passed as input.",
+                                "title_case": false,
+                                "type": "str",
+                                "_input_type": "MultilineInput"
+                            }
+                        },
+                        "description": "n",
+                        "icon": "type",
+                        "base_classes": [
+                            "Message"
+                        ],
+                        "display_name": "Text Input",
+                        "documentation": "",
+                        "custom_fields": {},
+                        "output_types": [],
+                        "pinned": false,
+                        "conditional_paths": [],
+                        "frozen": false,
+                        "outputs": [
+                            {
+                                "types": [
+                                    "Message"
+                                ],
+                                "selected": "Message",
+                                "name": "text",
+                                "display_name": "Text",
+                                "method": "text_response",
+                                "value": "__UNDEFINED__",
+                                "cache": true
+                            }
+                        ],
+                        "field_order": [
+                            "input_value"
+                        ],
+                        "beta": false,
+                        "edited": false,
+                        "metadata": {},
+                        "lf_version": "1.0.19.post1"
+                    },
+                    "id": "TextInput-Mijxy"
+                },
+                "selected": false,
+                "width": 384,
+                "height": 287,
+                "dragging": false
+            },
+            {
+                "id": "TextInput-JyTyM",
+                "type": "genericNode",
+                "position": {
+                    "x": 68,
+                    "y": 330.42870370265484
+                },
+                "data": {
+                    "type": "TextInput",
+                    "node": {
+                        "template": {
+                            "_type": "Component",
+                            "code": {
+                                "type": "code",
+                                "required": true,
+                                "placeholder": "",
+                                "list": false,
+                                "show": true,
+                                "multiline": true,
+                                "value": "from langflow.base.io.text import TextComponent\nfrom langflow.io import MultilineInput, Output\nfrom langflow.schema.message import Message\n\n\nclass TextInputComponent(TextComponent):\n    display_name = \"Text Input\"\n    description = \"Get text inputs from the Playground.\"\n    icon = \"type\"\n    name = \"TextInput\"\n\n    inputs = [\n        MultilineInput(\n            name=\"input_value\",\n            display_name=\"Text\",\n            info=\"Text to be passed as input.\",\n        ),\n    ]\n    outputs = [\n        Output(display_name=\"Text\", name=\"text\", method=\"text_response\"),\n    ]\n\n    def text_response(self) -> Message:\n        return Message(\n            text=self.input_value,\n        )\n",
+                                "fileTypes": [],
+                                "file_path": "",
+                                "password": false,
+                                "name": "code",
+                                "advanced": true,
+                                "dynamic": true,
+                                "info": "",
+                                "load_from_db": false,
+                                "title_case": false
+                            },
+                            "input_value": {
+                                "trace_as_input": true,
+                                "multiline": true,
+                                "trace_as_metadata": true,
+                                "load_from_db": false,
+                                "list": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "input_value",
+                                "value": "Founding Engineer\nFull-time\nOn-site (SF only)\nSan Francisco, CA\nAbout this role\nWe are looking for a passionate founding full-stack engineer who loves to ship code and is not afraid to learn. Ideally, you are a self-starter, build things for fun, and are not afraid to iterate fast. \n\nAbout Paraform\nParaform is a marketplace connecting companies with open roles and recruiters who can fill them.\nCompanies can work with specialized recruiters more cheaply, monitor their performance, and flex based on demand. Recruiters don't have to worry about acquiring clients while earning and working on their own terms.\nIncredible teams at the most exciting startups and enterprises are being built as a result.\n\nOur values and culture\nWe work hard and enjoy being together in person. We are transparent about our work ethic and expectations because it enables us to have extreme ownership in building at a pace that is unmatched.\nCustomers, customers, customers. We're customer-obsessed and always start with the customer first. We are the customer support team.\nShip fast and break things. We believe great products come from lots of experimentation, so we value fast development. No one is going to wait around for us to make things, especially something that's perfect.\nTake care of each other. We trust each other and want to enable everyone to do their best work. That means an all food and transportation compensated, gym membership, unlimited PTO, global offsites, premium healthcare and a free bike.",
+                                "display_name": "Text",
+                                "advanced": false,
+                                "input_types": [
+                                    "Message"
+                                ],
+                                "dynamic": false,
+                                "info": "Text to be passed as input.",
+                                "title_case": false,
+                                "type": "str",
+                                "_input_type": "MultilineInput"
+                            }
+                        },
+                        "description": "job description",
+                        "icon": "type",
+                        "base_classes": [
+                            "Message"
+                        ],
+                        "display_name": "Text Input",
+                        "documentation": "",
+                        "custom_fields": {},
+                        "output_types": [],
+                        "pinned": false,
+                        "conditional_paths": [],
+                        "frozen": false,
+                        "outputs": [
+                            {
+                                "types": [
+                                    "Message"
+                                ],
+                                "selected": "Message",
+                                "name": "text",
+                                "display_name": "Text",
+                                "method": "text_response",
+                                "value": "__UNDEFINED__",
+                                "cache": true
+                            }
+                        ],
+                        "field_order": [
+                            "input_value"
+                        ],
+                        "beta": false,
+                        "edited": false,
+                        "metadata": {},
+                        "lf_version": "1.0.19.post1"
+                    },
+                    "id": "TextInput-JyTyM"
+                },
+                "selected": true,
+                "width": 384,
+                "height": 287,
+                "dragging": false
+            },
+            {
+                "id": "AzureOpenAIModel-rRgMw",
+                "type": "genericNode",
+                "position": {
+                    "x": 2262.94247568408,
+                    "y": 461.84144032951355
+                },
+                "data": {
+                    "type": "AzureOpenAIModel",
+                    "node": {
+                        "template": {
+                            "_type": "Component",
+                            "output_parser": {
+                                "trace_as_metadata": true,
+                                "list": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "output_parser",
+                                "value": "",
+                                "display_name": "Output Parser",
+                                "advanced": true,
+                                "input_types": [
+                                    "OutputParser"
+                                ],
+                                "dynamic": false,
+                                "info": "The parser to use to parse the output of the model",
+                                "title_case": false,
+                                "type": "other",
+                                "_input_type": "HandleInput"
+                            },
+                            "api_key": {
+                                "load_from_db": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "api_key",
+                                "value": "d26cf6f9ccd34426b28079b675ac40f9",
+                                "display_name": "API Key",
+                                "advanced": false,
+                                "input_types": [
+                                    "Message"
+                                ],
+                                "dynamic": false,
+                                "info": "",
+                                "title_case": false,
+                                "password": true,
+                                "type": "str",
+                                "_input_type": "SecretStrInput"
+                            },
+                            "api_version": {
+                                "trace_as_metadata": true,
+                                "options": [
+                                    "2023-03-15-preview",
+                                    "2023-05-15",
+                                    "2023-06-01-preview",
+                                    "2023-07-01-preview",
+                                    "2023-08-01-preview",
+                                    "2023-09-01-preview",
+                                    "2023-12-01-preview",
+                                    "2024-04-09",
+                                    "2024-05-13"
+                                ],
+                                "combobox": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "api_version",
+                                "value": "2023-03-15-preview",
+                                "display_name": "API Version",
+                                "advanced": false,
+                                "dynamic": false,
+                                "info": "",
+                                "title_case": false,
+                                "type": "str",
+                                "_input_type": "DropdownInput"
+                            },
+                            "azure_deployment": {
+                                "trace_as_input": true,
+                                "trace_as_metadata": true,
+                                "load_from_db": false,
+                                "list": false,
+                                "required": true,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "azure_deployment",
+                                "value": "gpt-4o-mini",
+                                "display_name": "Deployment Name",
+                                "advanced": false,
+                                "input_types": [
+                                    "Message"
+                                ],
+                                "dynamic": false,
+                                "info": "",
+                                "title_case": false,
+                                "type": "str",
+                                "_input_type": "MessageTextInput"
+                            },
+                            "azure_endpoint": {
+                                "trace_as_input": true,
+                                "trace_as_metadata": true,
+                                "load_from_db": false,
+                                "list": false,
+                                "required": true,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "azure_endpoint",
+                                "value": "https://unilink-gpt.openai.azure.com/",
+                                "display_name": "Azure Endpoint",
+                                "advanced": false,
+                                "input_types": [
+                                    "Message"
+                                ],
+                                "dynamic": false,
+                                "info": "Your Azure endpoint, including the resource. Example: `https://example-resource.azure.openai.com/`",
+                                "title_case": false,
+                                "type": "str",
+                                "_input_type": "MessageTextInput"
+                            },
+                            "code": {
+                                "type": "code",
+                                "required": true,
+                                "placeholder": "",
+                                "list": false,
+                                "show": true,
+                                "multiline": true,
+                                "value": "from langchain_openai import AzureChatOpenAI\n\nfrom langflow.base.models.model import LCModelComponent\nfrom langflow.field_typing import LanguageModel\nfrom langflow.inputs import MessageTextInput\nfrom langflow.inputs.inputs import HandleInput\nfrom langflow.io import DropdownInput, FloatInput, IntInput, SecretStrInput\n\n\nclass AzureChatOpenAIComponent(LCModelComponent):\n    display_name: str = \"Azure OpenAI\"\n    description: str = \"Generate text using Azure OpenAI LLMs.\"\n    documentation: str = \"https://python.langchain.com/docs/integrations/llms/azure_openai\"\n    beta = False\n    icon = \"Azure\"\n    name = \"AzureOpenAIModel\"\n\n    AZURE_OPENAI_API_VERSIONS = [\n        \"2023-03-15-preview\",\n        \"2023-05-15\",\n        \"2023-06-01-preview\",\n        \"2023-07-01-preview\",\n        \"2023-08-01-preview\",\n        \"2023-09-01-preview\",\n        \"2023-12-01-preview\",\n        \"2024-04-09\",\n        \"2024-05-13\",\n    ]\n\n    inputs = [\n        *LCModelComponent._base_inputs,\n        MessageTextInput(\n            name=\"azure_endpoint\",\n            display_name=\"Azure Endpoint\",\n            info=\"Your Azure endpoint, including the resource. Example: `https://example-resource.azure.openai.com/`\",\n            required=True,\n        ),\n        MessageTextInput(name=\"azure_deployment\", display_name=\"Deployment Name\", required=True),\n        SecretStrInput(name=\"api_key\", display_name=\"API Key\"),\n        DropdownInput(\n            name=\"api_version\",\n            display_name=\"API Version\",\n            options=AZURE_OPENAI_API_VERSIONS,\n            value=AZURE_OPENAI_API_VERSIONS[-1],\n        ),\n        FloatInput(name=\"temperature\", display_name=\"Temperature\", value=0.7),\n        IntInput(\n            name=\"max_tokens\",\n            display_name=\"Max Tokens\",\n            advanced=True,\n            info=\"The maximum number of tokens to generate. Set to 0 for unlimited tokens.\",\n        ),\n        HandleInput(\n            name=\"output_parser\",\n            display_name=\"Output Parser\",\n            info=\"The parser to use to parse the output of the model\",\n            advanced=True,\n            input_types=[\"OutputParser\"],\n        ),\n    ]\n\n    def build_model(self) -> LanguageModel:  # type: ignore[type-var]\n        azure_endpoint = self.azure_endpoint\n        azure_deployment = self.azure_deployment\n        api_version = self.api_version\n        api_key = self.api_key\n        temperature = self.temperature\n        max_tokens = self.max_tokens\n        stream = self.stream\n\n        try:\n            output = AzureChatOpenAI(\n                azure_endpoint=azure_endpoint,\n                azure_deployment=azure_deployment,\n                api_version=api_version,\n                api_key=api_key,\n                temperature=temperature,\n                max_tokens=max_tokens or None,\n                streaming=stream,\n            )\n        except Exception as e:\n            msg = f\"Could not connect to AzureOpenAI API: {e}\"\n            raise ValueError(msg) from e\n\n        return output\n",
+                                "fileTypes": [],
+                                "file_path": "",
+                                "password": false,
+                                "name": "code",
+                                "advanced": true,
+                                "dynamic": true,
+                                "info": "",
+                                "load_from_db": false,
+                                "title_case": false
+                            },
+                            "input_value": {
+                                "trace_as_input": true,
+                                "trace_as_metadata": true,
+                                "load_from_db": false,
+                                "list": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "input_value",
+                                "value": "",
+                                "display_name": "Input",
+                                "advanced": false,
+                                "input_types": [
+                                    "Message"
+                                ],
+                                "dynamic": false,
+                                "info": "",
+                                "title_case": false,
+                                "type": "str",
+                                "_input_type": "MessageInput"
+                            },
+                            "max_tokens": {
+                                "trace_as_metadata": true,
+                                "list": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "max_tokens",
+                                "value": "",
+                                "display_name": "Max Tokens",
+                                "advanced": true,
+                                "dynamic": false,
+                                "info": "The maximum number of tokens to generate. Set to 0 for unlimited tokens.",
+                                "title_case": false,
+                                "type": "int",
+                                "_input_type": "IntInput"
+                            },
+                            "stream": {
+                                "trace_as_metadata": true,
+                                "list": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "stream",
+                                "value": false,
+                                "display_name": "Stream",
+                                "advanced": true,
+                                "dynamic": false,
+                                "info": "Stream the response from the model. Streaming works only in Chat.",
+                                "title_case": false,
+                                "type": "bool",
+                                "_input_type": "BoolInput"
+                            },
+                            "system_message": {
+                                "trace_as_input": true,
+                                "trace_as_metadata": true,
+                                "load_from_db": false,
+                                "list": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "system_message",
+                                "value": "",
+                                "display_name": "System Message",
+                                "advanced": true,
+                                "input_types": [
+                                    "Message"
+                                ],
+                                "dynamic": false,
+                                "info": "System message to pass to the model.",
+                                "title_case": false,
+                                "type": "str",
+                                "_input_type": "MessageTextInput"
+                            },
+                            "temperature": {
+                                "trace_as_metadata": true,
+                                "list": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "temperature",
+                                "value": 0.7,
+                                "display_name": "Temperature",
+                                "advanced": false,
+                                "dynamic": false,
+                                "info": "",
+                                "title_case": false,
+                                "type": "float",
+                                "_input_type": "FloatInput"
+                            }
+                        },
+                        "description": "Generate text using Azure OpenAI LLMs.",
+                        "icon": "Azure",
+                        "base_classes": [
+                            "LanguageModel",
+                            "Message"
+                        ],
+                        "display_name": "Azure OpenAI",
+                        "documentation": "https://python.langchain.com/docs/integrations/llms/azure_openai",
+                        "custom_fields": {},
+                        "output_types": [],
+                        "pinned": false,
+                        "conditional_paths": [],
+                        "frozen": false,
+                        "outputs": [
+                            {
+                                "types": [
+                                    "Message"
+                                ],
+                                "selected": "Message",
+                                "name": "text_output",
+                                "display_name": "Text",
+                                "method": "text_response",
+                                "value": "__UNDEFINED__",
+                                "cache": true,
+                                "required_inputs": [
+                                    "input_value",
+                                    "stream",
+                                    "system_message"
+                                ]
+                            },
+                            {
+                                "types": [
+                                    "LanguageModel"
+                                ],
+                                "selected": "LanguageModel",
+                                "name": "model_output",
+                                "display_name": "Language Model",
+                                "method": "build_model",
+                                "value": "__UNDEFINED__",
+                                "cache": true,
+                                "required_inputs": [
+                                    "api_key",
+                                    "api_version",
+                                    "azure_deployment",
+                                    "azure_endpoint",
+                                    "max_tokens",
+                                    "stream",
+                                    "temperature"
+                                ]
+                            }
+                        ],
+                        "field_order": [
+                            "input_value",
+                            "system_message",
+                            "stream",
+                            "azure_endpoint",
+                            "azure_deployment",
+                            "api_key",
+                            "api_version",
+                            "temperature",
+                            "max_tokens",
+                            "output_parser"
+                        ],
+                        "beta": false,
+                        "edited": false,
+                        "metadata": {},
+                        "lf_version": "1.0.19.post1"
+                    },
+                    "id": "AzureOpenAIModel-rRgMw"
+                },
+                "selected": false,
+                "width": 384,
+                "height": 757
+            },
+            {
+                "id": "Prompt-sLi4Q",
+                "type": "genericNode",
+                "position": {
+                    "x": 1224.8009654983741,
+                    "y": 1064.0974737432837
+                },
+                "data": {
+                    "type": "Prompt",
+                    "node": {
+                        "template": {
+                            "_type": "Component",
+                            "code": {
+                                "type": "code",
+                                "required": true,
+                                "placeholder": "",
+                                "list": false,
+                                "show": true,
+                                "multiline": true,
+                                "value": "from langflow.base.prompts.api_utils import process_prompt_template\nfrom langflow.custom import Component\nfrom langflow.inputs.inputs import DefaultPromptField\nfrom langflow.io import Output, PromptInput\nfrom langflow.schema.message import Message\nfrom langflow.template.utils import update_template_values\n\n\nclass PromptComponent(Component):\n    display_name: str = \"Prompt\"\n    description: str = \"Create a prompt template with dynamic variables.\"\n    icon = \"prompts\"\n    trace_type = \"prompt\"\n    name = \"Prompt\"\n\n    inputs = [\n        PromptInput(name=\"template\", display_name=\"Template\"),\n    ]\n\n    outputs = [\n        Output(display_name=\"Prompt Message\", name=\"prompt\", method=\"build_prompt\"),\n    ]\n\n    async def build_prompt(\n        self,\n    ) -> Message:\n        prompt = await Message.from_template_and_variables(**self._attributes)\n        self.status = prompt.text\n        return prompt\n\n    def _update_template(self, frontend_node: dict):\n        prompt_template = frontend_node[\"template\"][\"template\"][\"value\"]\n        custom_fields = frontend_node[\"custom_fields\"]\n        frontend_node_template = frontend_node[\"template\"]\n        _ = process_prompt_template(\n            template=prompt_template,\n            name=\"template\",\n            custom_fields=custom_fields,\n            frontend_node_template=frontend_node_template,\n        )\n        return frontend_node\n\n    def post_code_processing(self, new_frontend_node: dict, current_frontend_node: dict):\n        \"\"\"\n        This function is called after the code validation is done.\n        \"\"\"\n        frontend_node = super().post_code_processing(new_frontend_node, current_frontend_node)\n        template = frontend_node[\"template\"][\"template\"][\"value\"]\n        # Kept it duplicated for backwards compatibility\n        _ = process_prompt_template(\n            template=template,\n            name=\"template\",\n            custom_fields=frontend_node[\"custom_fields\"],\n            frontend_node_template=frontend_node[\"template\"],\n        )\n        # Now that template is updated, we need to grab any values that were set in the current_frontend_node\n        # and update the frontend_node with those values\n        update_template_values(new_template=frontend_node, previous_template=current_frontend_node[\"template\"])\n        return frontend_node\n\n    def _get_fallback_input(self, **kwargs):\n        return DefaultPromptField(**kwargs)\n",
+                                "fileTypes": [],
+                                "file_path": "",
+                                "password": false,
+                                "name": "code",
+                                "advanced": true,
+                                "dynamic": true,
+                                "info": "",
+                                "load_from_db": false,
+                                "title_case": false
+                            },
+                            "template": {
+                                "trace_as_input": true,
+                                "list": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "template",
+                                "value": "Here is a list of {n} candidates and a job description. Please find relevant information about each candidate with the tools available to you. You have access to a Google Search API tool. Please use it to find additional information on each candidate. Create search queries with personally identifiable information about the candidate, like the school the went to, companies they've worked at or founded, where they are from, etc. Please do not use the skills they have in the search queries, as this will not return accurate Google Search results. For example, \"Harry Gao software development React Typescript\" is NOT a good search query. \"Harry Gao Capital One\" and \"Harry Gao Washington University computer science\" are good search queries. Perform 3 different searches for each candidate to find information about them. Return all the relevant urls you find for each candidate. Please include things such as their Linkedin, Github, papers/articles/blogs they've written, articles written about them, awards they've won, their social media, etc. Finally, create a summary that describes everything you know and found about the candidate, and why they are a good fit for the role.\n\nHere is the job description:\n{description}\n\nHere are the candidates:\n{candidates}\n\nPlease output the results in JSON valid format with no extra text. Each candidate in the output should have a name, summary, and relevant urls field that is an array of URL strings.\n\nHere is an example of the type of output we are looking for each candidate:\n    \"name\": \"Harry Gao\",\n    \"summary\": \"Harry Gao is a senior studying computer science + math student at Washington University in St. Louis. He has interned as a Software Engineer at Capital One and a Data scientist at UnitedHealth Group. From his Github, he is proficient in Python, React, and Pytorch. He has 2 published papers on deep learning for image restoration and image compression. He has worked at a startup called Mozi and is also currently founding a startup called UniLink that specializes in talent discovery for headhunters - he was a finalist in the 2024 Skandalaris Venture Competition. He is passionate about software, machine learning, and the startup space. He fits this role as a founding engineer at Mercor because of his deep interest in AI as well as his software engineering and design abilities. In addition, his experience as a founder would provide him key skills and knowledge to succeed in this position.\"\n    \"relevant_urls\": [\n        \"https://www.linkedin.com/in/harrygao56/\",\n        \"https://github.com/harrygao56\",\n        \"https://scholar.google.com/citations?user=WK_bR0gAAAAJ&hl=en&inst=2230987035966559800\",\n        \"https://scholar.google.com/citations?user=WK_bR0gAAAAJ&hl=en&inst=2230987035966559800\",\n        \"https://sts.wustl.edu/people/harry-gao/\",\n        \"https://skandalaris.wustl.edu/blog/2024/10/23/fall-2024-skandalaris-venture-competition-finalists-announced/\",\n    ]",
+                                "display_name": "Template",
+                                "advanced": false,
+                                "dynamic": false,
+                                "info": "",
+                                "title_case": false,
+                                "type": "prompt",
+                                "_input_type": "PromptInput"
+                            },
+                            "candidates": {
+                                "field_type": "str",
+                                "required": false,
+                                "placeholder": "",
+                                "list": false,
+                                "show": true,
+                                "multiline": true,
+                                "value": "",
+                                "fileTypes": [],
+                                "file_path": "",
+                                "name": "candidates",
+                                "display_name": "candidates",
+                                "advanced": false,
+                                "input_types": [
+                                    "Message",
+                                    "Text"
+                                ],
+                                "dynamic": false,
+                                "info": "",
+                                "load_from_db": false,
+                                "title_case": false,
+                                "type": "str"
+                            },
+                            "n": {
+                                "field_type": "str",
+                                "required": false,
+                                "placeholder": "",
+                                "list": false,
+                                "show": true,
+                                "multiline": true,
+                                "value": "",
+                                "fileTypes": [],
+                                "file_path": "",
+                                "name": "n",
+                                "display_name": "n",
+                                "advanced": false,
+                                "input_types": [
+                                    "Message",
+                                    "Text"
+                                ],
+                                "dynamic": false,
+                                "info": "",
+                                "load_from_db": false,
+                                "title_case": false,
+                                "type": "str"
+                            },
+                            "description": {
+                                "field_type": "str",
+                                "required": false,
+                                "placeholder": "",
+                                "list": false,
+                                "show": true,
+                                "multiline": true,
+                                "value": "",
+                                "fileTypes": [],
+                                "file_path": "",
+                                "name": "description",
+                                "display_name": "description",
+                                "advanced": false,
+                                "input_types": [
+                                    "Message",
+                                    "Text"
+                                ],
+                                "dynamic": false,
+                                "info": "",
+                                "load_from_db": false,
+                                "title_case": false,
+                                "type": "str"
+                            }
+                        },
+                        "description": "Create a prompt template with dynamic variables.",
+                        "icon": "prompts",
+                        "is_input": null,
+                        "is_output": null,
+                        "is_composition": null,
+                        "base_classes": [
+                            "Message"
+                        ],
+                        "name": "",
+                        "display_name": "Prompt",
+                        "documentation": "",
+                        "custom_fields": {
+                            "template": [
+                                "n",
+                                "description",
+                                "candidates"
+                            ]
+                        },
+                        "output_types": [],
+                        "full_path": null,
+                        "pinned": false,
+                        "conditional_paths": [],
+                        "frozen": false,
+                        "outputs": [
+                            {
+                                "types": [
+                                    "Message"
+                                ],
+                                "selected": "Message",
+                                "name": "prompt",
+                                "hidden": null,
+                                "display_name": "Prompt Message",
+                                "method": "build_prompt",
+                                "value": "__UNDEFINED__",
+                                "cache": true,
+                                "required_inputs": null
+                            }
+                        ],
+                        "field_order": [
+                            "template"
+                        ],
+                        "beta": false,
+                        "error": null,
+                        "edited": false,
+                        "metadata": {},
+                        "lf_version": "1.0.19.post1"
+                    },
+                    "id": "Prompt-sLi4Q"
+                },
+                "selected": false,
+                "width": 384,
+                "height": 559,
+                "dragging": false
+            },
+            {
+                "id": "TextOutput-jhX8N",
+                "type": "genericNode",
+                "position": {
+                    "x": 2575.533648145236,
+                    "y": 1676.7579802226908
+                },
+                "data": {
+                    "type": "TextOutput",
+                    "node": {
+                        "template": {
+                            "_type": "Component",
+                            "code": {
+                                "type": "code",
+                                "required": true,
+                                "placeholder": "",
+                                "list": false,
+                                "show": true,
+                                "multiline": true,
+                                "value": "from langflow.base.io.text import TextComponent\nfrom langflow.io import MultilineInput, Output\nfrom langflow.schema.message import Message\n\n\nclass TextOutputComponent(TextComponent):\n    display_name = \"Text Output\"\n    description = \"Display a text output in the Playground.\"\n    icon = \"type\"\n    name = \"TextOutput\"\n\n    inputs = [\n        MultilineInput(\n            name=\"input_value\",\n            display_name=\"Text\",\n            info=\"Text to be passed as output.\",\n        ),\n    ]\n    outputs = [\n        Output(display_name=\"Text\", name=\"text\", method=\"text_response\"),\n    ]\n\n    def text_response(self) -> Message:\n        message = Message(\n            text=self.input_value,\n        )\n        self.status = self.input_value\n        return message\n",
+                                "fileTypes": [],
+                                "file_path": "",
+                                "password": false,
+                                "name": "code",
+                                "advanced": true,
+                                "dynamic": true,
+                                "info": "",
+                                "load_from_db": false,
+                                "title_case": false
+                            },
+                            "input_value": {
+                                "trace_as_input": true,
+                                "multiline": true,
+                                "trace_as_metadata": true,
+                                "load_from_db": false,
+                                "list": false,
+                                "required": false,
+                                "placeholder": "",
+                                "show": true,
+                                "name": "input_value",
+                                "value": "",
+                                "display_name": "Text",
+                                "advanced": false,
+                                "input_types": [
+                                    "Message"
+                                ],
+                                "dynamic": false,
+                                "info": "Text to be passed as output.",
+                                "title_case": false,
+                                "type": "str",
+                                "_input_type": "MultilineInput"
+                            }
+                        },
+                        "description": "Display a text output in the Playground.",
+                        "icon": "type",
+                        "base_classes": [
+                            "Message"
+                        ],
+                        "display_name": "Text Output",
+                        "documentation": "",
+                        "custom_fields": {},
+                        "output_types": [],
+                        "pinned": false,
+                        "conditional_paths": [],
+                        "frozen": false,
+                        "outputs": [
+                            {
+                                "types": [
+                                    "Message"
+                                ],
+                                "selected": "Message",
+                                "name": "text",
+                                "display_name": "Text",
+                                "method": "text_response",
+                                "value": "__UNDEFINED__",
+                                "cache": true
+                            }
+                        ],
+                        "field_order": [
+                            "input_value"
+                        ],
+                        "beta": false,
+                        "edited": false,
+                        "metadata": {},
+                        "lf_version": "1.0.19.post1"
+                    },
+                    "id": "TextOutput-jhX8N"
+                },
+                "selected": false,
+                "width": 384,
+                "height": 287,
+                "dragging": false
+            }
+        ],
+        "edges": [
+            {
+                "source": "SearchAPI-8xIft",
+                "target": "ToolCallingAgent-5Q0Er",
+                "sourceHandle": "{œdataTypeœ:œSearchAPIœ,œidœ:œSearchAPI-8xIftœ,œnameœ:œapi_build_toolœ,œoutput_typesœ:[œToolœ]}",
+                "targetHandle": "{œfieldNameœ:œtoolsœ,œidœ:œToolCallingAgent-5Q0Erœ,œinputTypesœ:[œToolœ,œBaseToolœ],œtypeœ:œotherœ}",
+                "id": "reactflow__edge-SearchAPI-8xIft{œdataTypeœ:œSearchAPIœ,œidœ:œSearchAPI-8xIftœ,œnameœ:œapi_build_toolœ,œoutput_typesœ:[œToolœ]}-ToolCallingAgent-5Q0Er{œfieldNameœ:œtoolsœ,œidœ:œToolCallingAgent-5Q0Erœ,œinputTypesœ:[œToolœ,œBaseToolœ],œtypeœ:œotherœ}",
+                "data": {
+                    "targetHandle": {
+                        "fieldName": "tools",
+                        "id": "ToolCallingAgent-5Q0Er",
+                        "inputTypes": [
+                            "Tool",
+                            "BaseTool"
+                        ],
+                        "type": "other"
+                    },
+                    "sourceHandle": {
+                        "dataType": "SearchAPI",
+                        "id": "SearchAPI-8xIft",
+                        "name": "api_build_tool",
+                        "output_types": [
+                            "Tool"
+                        ]
+                    }
+                },
+                "selected": false,
+                "animated": false,
+                "className": ""
+            },
+            {
+                "source": "url_content_fetcher-bDGCl",
+                "target": "ToolCallingAgent-5Q0Er",
+                "sourceHandle": "{œdataTypeœ:œurl_content_fetcherœ,œidœ:œurl_content_fetcher-bDGClœ,œnameœ:œapi_build_toolœ,œoutput_typesœ:[œToolœ]}",
+                "targetHandle": "{œfieldNameœ:œtoolsœ,œidœ:œToolCallingAgent-5Q0Erœ,œinputTypesœ:[œToolœ,œBaseToolœ],œtypeœ:œotherœ}",
+                "id": "reactflow__edge-url_content_fetcher-bDGCl{œdataTypeœ:œurl_content_fetcherœ,œidœ:œurl_content_fetcher-bDGClœ,œnameœ:œapi_build_toolœ,œoutput_typesœ:[œToolœ]}-ToolCallingAgent-5Q0Er{œfieldNameœ:œtoolsœ,œidœ:œToolCallingAgent-5Q0Erœ,œinputTypesœ:[œToolœ,œBaseToolœ],œtypeœ:œotherœ}",
+                "data": {
+                    "targetHandle": {
+                        "fieldName": "tools",
+                        "id": "ToolCallingAgent-5Q0Er",
+                        "inputTypes": [
+                            "Tool",
+                            "BaseTool"
+                        ],
+                        "type": "other"
+                    },
+                    "sourceHandle": {
+                        "dataType": "url_content_fetcher",
+                        "id": "url_content_fetcher-bDGCl",
+                        "name": "api_build_tool",
+                        "output_types": [
+                            "Tool"
+                        ]
+                    }
+                },
+                "selected": false,
+                "animated": false,
+                "className": ""
+            },
+            {
+                "source": "CustomComponent-W7bsk",
+                "target": "URL-YhNkF",
+                "sourceHandle": "{œdataTypeœ:œCustomComponentœ,œidœ:œCustomComponent-W7bskœ,œnameœ:œoutputœ,œoutput_typesœ:[œMessageœ]}",
+                "targetHandle": "{œfieldNameœ:œurlsœ,œidœ:œURL-YhNkFœ,œinputTypesœ:[œMessageœ],œtypeœ:œstrœ}",
+                "id": "reactflow__edge-CustomComponent-W7bsk{œdataTypeœ:œCustomComponentœ,œidœ:œCustomComponent-W7bskœ,œnameœ:œoutputœ,œoutput_typesœ:[œMessageœ]}-URL-YhNkF{œfieldNameœ:œurlsœ,œidœ:œURL-YhNkFœ,œinputTypesœ:[œMessageœ],œtypeœ:œstrœ}",
+                "data": {
+                    "targetHandle": {
+                        "fieldName": "urls",
+                        "id": "URL-YhNkF",
+                        "inputTypes": [
+                            "Message"
+                        ],
+                        "type": "str"
+                    },
+                    "sourceHandle": {
+                        "dataType": "CustomComponent",
+                        "id": "CustomComponent-W7bsk",
+                        "name": "output",
+                        "output_types": [
+                            "Message"
+                        ]
+                    }
+                },
+                "selected": false,
+                "animated": false,
+                "className": ""
+            },
+            {
+                "source": "URL-YhNkF",
+                "target": "Prompt-W93bF",
+                "sourceHandle": "{œdataTypeœ:œURLœ,œidœ:œURL-YhNkFœ,œnameœ:œtextœ,œoutput_typesœ:[œMessageœ]}",
+                "targetHandle": "{œfieldNameœ:œcandidatesœ,œidœ:œPrompt-W93bFœ,œinputTypesœ:[œMessageœ,œTextœ],œtypeœ:œstrœ}",
+                "id": "reactflow__edge-URL-YhNkF{œdataTypeœ:œURLœ,œidœ:œURL-YhNkFœ,œnameœ:œtextœ,œoutput_typesœ:[œMessageœ]}-Prompt-W93bF{œfieldNameœ:œcandidatesœ,œidœ:œPrompt-W93bFœ,œinputTypesœ:[œMessageœ,œTextœ],œtypeœ:œstrœ}",
+                "data": {
+                    "targetHandle": {
+                        "fieldName": "candidates",
+                        "id": "Prompt-W93bF",
+                        "inputTypes": [
+                            "Message",
+                            "Text"
+                        ],
+                        "type": "str"
+                    },
+                    "sourceHandle": {
+                        "dataType": "URL",
+                        "id": "URL-YhNkF",
+                        "name": "text",
+                        "output_types": [
+                            "Message"
+                        ]
+                    }
+                },
+                "selected": false,
+                "animated": false,
+                "className": ""
+            },
+            {
+                "source": "TextInput-JyTyM",
+                "target": "CustomComponent-W7bsk",
+                "sourceHandle": "{œdataTypeœ:œTextInputœ,œidœ:œTextInput-JyTyMœ,œnameœ:œtextœ,œoutput_typesœ:[œMessageœ]}",
+                "targetHandle": "{œfieldNameœ:œinput_valueœ,œidœ:œCustomComponent-W7bskœ,œinputTypesœ:[œMessageœ],œtypeœ:œstrœ}",
+                "id": "reactflow__edge-TextInput-JyTyM{œdataTypeœ:œTextInputœ,œidœ:œTextInput-JyTyMœ,œnameœ:œtextœ,œoutput_typesœ:[œMessageœ]}-CustomComponent-W7bsk{œfieldNameœ:œinput_valueœ,œidœ:œCustomComponent-W7bskœ,œinputTypesœ:[œMessageœ],œtypeœ:œstrœ}",
+                "data": {
+                    "targetHandle": {
+                        "fieldName": "input_value",
+                        "id": "CustomComponent-W7bsk",
+                        "inputTypes": [
+                            "Message"
+                        ],
+                        "type": "str"
+                    },
+                    "sourceHandle": {
+                        "dataType": "TextInput",
+                        "id": "TextInput-JyTyM",
+                        "name": "text",
+                        "output_types": [
+                            "Message"
+                        ]
+                    }
+                },
+                "selected": false,
+                "animated": false,
+                "className": ""
+            },
+            {
+                "source": "TextInput-JyTyM",
+                "target": "Prompt-W93bF",
+                "sourceHandle": "{œdataTypeœ:œTextInputœ,œidœ:œTextInput-JyTyMœ,œnameœ:œtextœ,œoutput_typesœ:[œMessageœ]}",
+                "targetHandle": "{œfieldNameœ:œjob_descriptionœ,œidœ:œPrompt-W93bFœ,œinputTypesœ:[œMessageœ,œTextœ],œtypeœ:œstrœ}",
+                "id": "reactflow__edge-TextInput-JyTyM{œdataTypeœ:œTextInputœ,œidœ:œTextInput-JyTyMœ,œnameœ:œtextœ,œoutput_typesœ:[œMessageœ]}-Prompt-W93bF{œfieldNameœ:œjob_descriptionœ,œidœ:œPrompt-W93bFœ,œinputTypesœ:[œMessageœ,œTextœ],œtypeœ:œstrœ}",
+                "data": {
+                    "targetHandle": {
+                        "fieldName": "job_description",
+                        "id": "Prompt-W93bF",
+                        "inputTypes": [
+                            "Message",
+                            "Text"
+                        ],
+                        "type": "str"
+                    },
+                    "sourceHandle": {
+                        "dataType": "TextInput",
+                        "id": "TextInput-JyTyM",
+                        "name": "text",
+                        "output_types": [
+                            "Message"
+                        ]
+                    }
+                },
+                "selected": false,
+                "animated": false,
+                "className": ""
+            },
+            {
+                "source": "TextInput-Mijxy",
+                "target": "Prompt-W93bF",
+                "sourceHandle": "{œdataTypeœ:œTextInputœ,œidœ:œTextInput-Mijxyœ,œnameœ:œtextœ,œoutput_typesœ:[œMessageœ]}",
+                "targetHandle": "{œfieldNameœ:œnœ,œidœ:œPrompt-W93bFœ,œinputTypesœ:[œMessageœ,œTextœ],œtypeœ:œstrœ}",
+                "id": "reactflow__edge-TextInput-Mijxy{œdataTypeœ:œTextInputœ,œidœ:œTextInput-Mijxyœ,œnameœ:œtextœ,œoutput_typesœ:[œMessageœ]}-Prompt-W93bF{œfieldNameœ:œnœ,œidœ:œPrompt-W93bFœ,œinputTypesœ:[œMessageœ,œTextœ],œtypeœ:œstrœ}",
+                "data": {
+                    "targetHandle": {
+                        "fieldName": "n",
+                        "id": "Prompt-W93bF",
+                        "inputTypes": [
+                            "Message",
+                            "Text"
+                        ],
+                        "type": "str"
+                    },
+                    "sourceHandle": {
+                        "dataType": "TextInput",
+                        "id": "TextInput-Mijxy",
+                        "name": "text",
+                        "output_types": [
+                            "Message"
+                        ]
+                    }
+                },
+                "selected": false,
+                "animated": false,
+                "className": ""
+            },
+            {
+                "source": "Prompt-W93bF",
+                "target": "AzureOpenAIModel-rRgMw",
+                "sourceHandle": "{œdataTypeœ:œPromptœ,œidœ:œPrompt-W93bFœ,œnameœ:œpromptœ,œoutput_typesœ:[œMessageœ]}",
+                "targetHandle": "{œfieldNameœ:œinput_valueœ,œidœ:œAzureOpenAIModel-rRgMwœ,œinputTypesœ:[œMessageœ],œtypeœ:œstrœ}",
+                "id": "reactflow__edge-Prompt-W93bF{œdataTypeœ:œPromptœ,œidœ:œPrompt-W93bFœ,œnameœ:œpromptœ,œoutput_typesœ:[œMessageœ]}-AzureOpenAIModel-rRgMw{œfieldNameœ:œinput_valueœ,œidœ:œAzureOpenAIModel-rRgMwœ,œinputTypesœ:[œMessageœ],œtypeœ:œstrœ}",
+                "data": {
+                    "targetHandle": {
+                        "fieldName": "input_value",
+                        "id": "AzureOpenAIModel-rRgMw",
+                        "inputTypes": [
+                            "Message"
+                        ],
+                        "type": "str"
+                    },
+                    "sourceHandle": {
+                        "dataType": "Prompt",
+                        "id": "Prompt-W93bF",
+                        "name": "prompt",
+                        "output_types": [
+                            "Message"
+                        ]
+                    }
+                },
+                "selected": false,
+                "animated": false,
+                "className": ""
+            },
+            {
+                "source": "Prompt-sLi4Q",
+                "target": "ToolCallingAgent-5Q0Er",
+                "sourceHandle": "{œdataTypeœ:œPromptœ,œidœ:œPrompt-sLi4Qœ,œnameœ:œpromptœ,œoutput_typesœ:[œMessageœ]}",
+                "targetHandle": "{œfieldNameœ:œinput_valueœ,œidœ:œToolCallingAgent-5Q0Erœ,œinputTypesœ:[œMessageœ],œtypeœ:œstrœ}",
+                "id": "reactflow__edge-Prompt-sLi4Q{œdataTypeœ:œPromptœ,œidœ:œPrompt-sLi4Qœ,œnameœ:œpromptœ,œoutput_typesœ:[œMessageœ]}-ToolCallingAgent-5Q0Er{œfieldNameœ:œinput_valueœ,œidœ:œToolCallingAgent-5Q0Erœ,œinputTypesœ:[œMessageœ],œtypeœ:œstrœ}",
+                "data": {
+                    "targetHandle": {
+                        "fieldName": "input_value",
+                        "id": "ToolCallingAgent-5Q0Er",
+                        "inputTypes": [
+                            "Message"
+                        ],
+                        "type": "str"
+                    },
+                    "sourceHandle": {
+                        "dataType": "Prompt",
+                        "id": "Prompt-sLi4Q",
+                        "name": "prompt",
+                        "output_types": [
+                            "Message"
+                        ]
+                    }
+                },
+                "selected": false,
+                "animated": false,
+                "className": ""
+            },
+            {
+                "source": "TextInput-Mijxy",
+                "target": "Prompt-sLi4Q",
+                "sourceHandle": "{œdataTypeœ:œTextInputœ,œidœ:œTextInput-Mijxyœ,œnameœ:œtextœ,œoutput_typesœ:[œMessageœ]}",
+                "targetHandle": "{œfieldNameœ:œnœ,œidœ:œPrompt-sLi4Qœ,œinputTypesœ:[œMessageœ,œTextœ],œtypeœ:œstrœ}",
+                "id": "reactflow__edge-TextInput-Mijxy{œdataTypeœ:œTextInputœ,œidœ:œTextInput-Mijxyœ,œnameœ:œtextœ,œoutput_typesœ:[œMessageœ]}-Prompt-sLi4Q{œfieldNameœ:œnœ,œidœ:œPrompt-sLi4Qœ,œinputTypesœ:[œMessageœ,œTextœ],œtypeœ:œstrœ}",
+                "data": {
+                    "targetHandle": {
+                        "fieldName": "n",
+                        "id": "Prompt-sLi4Q",
+                        "inputTypes": [
+                            "Message",
+                            "Text"
+                        ],
+                        "type": "str"
+                    },
+                    "sourceHandle": {
+                        "dataType": "TextInput",
+                        "id": "TextInput-Mijxy",
+                        "name": "text",
+                        "output_types": [
+                            "Message"
+                        ]
+                    }
+                },
+                "selected": false,
+                "animated": false,
+                "className": ""
+            },
+            {
+                "source": "AzureOpenAIModel-rRgMw",
+                "target": "Prompt-sLi4Q",
+                "sourceHandle": "{œdataTypeœ:œAzureOpenAIModelœ,œidœ:œAzureOpenAIModel-rRgMwœ,œnameœ:œtext_outputœ,œoutput_typesœ:[œMessageœ]}",
+                "targetHandle": "{œfieldNameœ:œcandidatesœ,œidœ:œPrompt-sLi4Qœ,œinputTypesœ:[œMessageœ,œTextœ],œtypeœ:œstrœ}",
+                "id": "reactflow__edge-AzureOpenAIModel-rRgMw{œdataTypeœ:œAzureOpenAIModelœ,œidœ:œAzureOpenAIModel-rRgMwœ,œnameœ:œtext_outputœ,œoutput_typesœ:[œMessageœ]}-Prompt-sLi4Q{œfieldNameœ:œcandidatesœ,œidœ:œPrompt-sLi4Qœ,œinputTypesœ:[œMessageœ,œTextœ],œtypeœ:œstrœ}",
+                "data": {
+                    "targetHandle": {
+                        "fieldName": "candidates",
+                        "id": "Prompt-sLi4Q",
+                        "inputTypes": [
+                            "Message",
+                            "Text"
+                        ],
+                        "type": "str"
+                    },
+                    "sourceHandle": {
+                        "dataType": "AzureOpenAIModel",
+                        "id": "AzureOpenAIModel-rRgMw",
+                        "name": "text_output",
+                        "output_types": [
+                            "Message"
+                        ]
+                    }
+                },
+                "selected": false,
+                "animated": false,
+                "className": ""
+            },
+            {
+                "source": "TextInput-JyTyM",
+                "target": "Prompt-sLi4Q",
+                "sourceHandle": "{œdataTypeœ:œTextInputœ,œidœ:œTextInput-JyTyMœ,œnameœ:œtextœ,œoutput_typesœ:[œMessageœ]}",
+                "targetHandle": "{œfieldNameœ:œdescriptionœ,œidœ:œPrompt-sLi4Qœ,œinputTypesœ:[œMessageœ,œTextœ],œtypeœ:œstrœ}",
+                "id": "reactflow__edge-TextInput-JyTyM{œdataTypeœ:œTextInputœ,œidœ:œTextInput-JyTyMœ,œnameœ:œtextœ,œoutput_typesœ:[œMessageœ]}-Prompt-sLi4Q{œfieldNameœ:œdescriptionœ,œidœ:œPrompt-sLi4Qœ,œinputTypesœ:[œMessageœ,œTextœ],œtypeœ:œstrœ}",
+                "data": {
+                    "targetHandle": {
+                        "fieldName": "description",
+                        "id": "Prompt-sLi4Q",
+                        "inputTypes": [
+                            "Message",
+                            "Text"
+                        ],
+                        "type": "str"
+                    },
+                    "sourceHandle": {
+                        "dataType": "TextInput",
+                        "id": "TextInput-JyTyM",
+                        "name": "text",
+                        "output_types": [
+                            "Message"
+                        ]
+                    }
+                },
+                "selected": false,
+                "animated": false,
+                "className": ""
+            },
+            {
+                "source": "AzureOpenAIModel-rRgMw",
+                "target": "ToolCallingAgent-5Q0Er",
+                "sourceHandle": "{œdataTypeœ:œAzureOpenAIModelœ,œidœ:œAzureOpenAIModel-rRgMwœ,œnameœ:œmodel_outputœ,œoutput_typesœ:[œLanguageModelœ]}",
+                "targetHandle": "{œfieldNameœ:œllmœ,œidœ:œToolCallingAgent-5Q0Erœ,œinputTypesœ:[œLanguageModelœ],œtypeœ:œotherœ}",
+                "id": "reactflow__edge-AzureOpenAIModel-rRgMw{œdataTypeœ:œAzureOpenAIModelœ,œidœ:œAzureOpenAIModel-rRgMwœ,œnameœ:œmodel_outputœ,œoutput_typesœ:[œLanguageModelœ]}-ToolCallingAgent-5Q0Er{œfieldNameœ:œllmœ,œidœ:œToolCallingAgent-5Q0Erœ,œinputTypesœ:[œLanguageModelœ],œtypeœ:œotherœ}",
+                "data": {
+                    "targetHandle": {
+                        "fieldName": "llm",
+                        "id": "ToolCallingAgent-5Q0Er",
+                        "inputTypes": [
+                            "LanguageModel"
+                        ],
+                        "type": "other"
+                    },
+                    "sourceHandle": {
+                        "dataType": "AzureOpenAIModel",
+                        "id": "AzureOpenAIModel-rRgMw",
+                        "name": "model_output",
+                        "output_types": [
+                            "LanguageModel"
+                        ]
+                    }
+                },
+                "selected": false,
+                "animated": false,
+                "className": ""
+            },
+            {
+                "source": "ToolCallingAgent-5Q0Er",
+                "sourceHandle": "{œdataTypeœ:œToolCallingAgentœ,œidœ:œToolCallingAgent-5Q0Erœ,œnameœ:œresponseœ,œoutput_typesœ:[œMessageœ]}",
+                "target": "TextOutput-jhX8N",
+                "targetHandle": "{œfieldNameœ:œinput_valueœ,œidœ:œTextOutput-jhX8Nœ,œinputTypesœ:[œMessageœ],œtypeœ:œstrœ}",
+                "data": {
+                    "targetHandle": {
+                        "fieldName": "input_value",
+                        "id": "TextOutput-jhX8N",
+                        "inputTypes": [
+                            "Message"
+                        ],
+                        "type": "str"
+                    },
+                    "sourceHandle": {
+                        "dataType": "ToolCallingAgent",
+                        "id": "ToolCallingAgent-5Q0Er",
+                        "name": "response",
+                        "output_types": [
+                            "Message"
+                        ]
+                    }
+                },
+                "id": "reactflow__edge-ToolCallingAgent-5Q0Er{œdataTypeœ:œToolCallingAgentœ,œidœ:œToolCallingAgent-5Q0Erœ,œnameœ:œresponseœ,œoutput_typesœ:[œMessageœ]}-TextOutput-jhX8N{œfieldNameœ:œinput_valueœ,œidœ:œTextOutput-jhX8Nœ,œinputTypesœ:[œMessageœ],œtypeœ:œstrœ}",
+                "animated": false,
+                "className": ""
+            }
+        ],
+        "viewport": {
+            "x": 190.26516474511286,
+            "y": 117.33372088640456,
+            "zoom": 0.2879670213525652
+        }
+    },
+    "description": "Unfolding Linguistic Possibilities.",
+    "name": "unlink-agent",
+    "last_tested_version": "1.0.19.post1",
+    "endpoint_name": null,
+    "is_component": false
+}
