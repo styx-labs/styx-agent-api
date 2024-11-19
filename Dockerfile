@@ -6,7 +6,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 ENV ENVIRONMENT=production
 ENV DB=unilink-app-db-prod
+ENV PORT=8080
 
-ENV PORT=8000
-#
-CMD exec fastapi run main.py --port ${PORT}
+# Use uvicorn to run the FastAPI app
+CMD exec uvicorn main:app --host 0.0.0.0 --port $PORT
