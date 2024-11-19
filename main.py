@@ -1,11 +1,11 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from database import get_db, engine
-import models
 import json
-from langflow.load import run_flow_from_json
+
+# from langflow.load import run_flow_from_json
+from firestore import add_analysis, get_all_analyses
+import datetime
 
 
 agent_system_prompt = """
@@ -71,8 +71,6 @@ Here is the job description:\n
 And here is the list of candidates:\n
 {candidates}"
 """
-
-models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
@@ -206,23 +204,27 @@ def analyze_job_description(description: str, num: int) -> str:
 
 
 @app.post("/analyze")
-def create_analysis(job: JobDescription, db: Session = Depends(get_db)):
+def create_analysis(job: JobDescription):
     result = analyze_job_description(job.description, job.num_candidates)
-    db_analysis = models.JobAnalysis(description=job.description, result=result)
-    db.add(db_analysis)
-    db.commit()
-    db.refresh(db_analysis)
-    return db_analysis
+    # Convert result string to dict if it's a JSON string
+    result_dict = json.loads(result) if isinstance(result, str) else result
+    print(result_dict)
+
+    analysis_data = {
+        "description": job.description,
+        "result": result_dict,
+        "timestamp": datetime.datetime.now(),
+    }
+
+    # Add to Firestore
+    doc_id = add_analysis(analysis_data)
+    print(doc_id)
+
+    # Return the created analysis with its ID
+    return {"id": doc_id, **analysis_data}
 
 
 @app.get("/analyses")
-def get_analyses(db: Session = Depends(get_db)):
-    analyses = db.query(models.JobAnalysis).all()
-    return [
-        {
-            "id": analysis.id,
-            "description": analysis.description,
-            "result": json.loads(analysis.result),
-        }
-        for analysis in analyses
-    ]
+def get_analyses():
+    analyses = get_all_analyses()
+    return analyses
