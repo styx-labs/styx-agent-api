@@ -12,7 +12,7 @@ steps:
     args:
       - "run"
       - "deploy"
-      - "backend"
+      - "unilink-agent-api"
       - "--image"
       - "gcr.io/$PROJECT_ID/unilink-agent-api"
       - "--region"
