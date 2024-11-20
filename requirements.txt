@@ -1,6 +1,9 @@
 fastapi
 uvicorn
-# langflow
 fastapi[standard]
 google-cloud-firestore==2.17.2
 python-dotenv==1.0.0
+langchain
+langchain-openai
+nltk
+requests
