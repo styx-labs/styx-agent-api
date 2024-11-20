@@ -2,7 +2,7 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_openai import AzureChatOpenAI
 from langchain.agents import create_tool_calling_agent
 from langchain.agents import AgentExecutor
-from langchain_core.runnables import chain
+from langchain_core.runnables import chain, RunnablePassthrough
 import dotenv
 import re
 import requests
@@ -11,7 +11,6 @@ from nltk.corpus import stopwords
 from nltk.stem import PorterStemmer
 import json
 import os
-from langchain_core.runnables import RunnablePassthrough
 from agents.prompts import agent_prompt, filter_prompt
 
 
