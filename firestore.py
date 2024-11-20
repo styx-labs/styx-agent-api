@@ -25,6 +25,11 @@ def add_analysis(analysis_data):
     return doc_ref.id
 
 
+def remove_analysis(doc_id):
+    db.collection("analyses").document(doc_id).delete()
+    return True
+
+
 def get_all_analyses():
     """
     Retrieve all analyses from Firestore

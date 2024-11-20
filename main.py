@@ -4,7 +4,7 @@ from pydantic import BaseModel
 import json
 
 # from langflow.load import run_flow_from_json
-from firestore import add_analysis, get_all_analyses
+from firestore import add_analysis, get_all_analyses, remove_analysis
 import datetime
 
 
@@ -208,7 +208,6 @@ def create_analysis(job: JobDescription):
     result = analyze_job_description(job.description, job.num_candidates)
     # Convert result string to dict if it's a JSON string
     result_dict = json.loads(result) if isinstance(result, str) else result
-    print(result_dict)
 
     analysis_data = {
         "description": job.description,
@@ -218,7 +217,6 @@ def create_analysis(job: JobDescription):
 
     # Add to Firestore
     doc_id = add_analysis(analysis_data)
-    print(doc_id)
 
     # Return the created analysis with its ID
     return {"id": doc_id, **analysis_data}
@@ -228,3 +226,8 @@ def create_analysis(job: JobDescription):
 def get_analyses():
     analyses = get_all_analyses()
     return analyses
+
+
+@app.delete("/analyses/{doc_id}")
+def delete_analysis(doc_id: str):
+    return remove_analysis(doc_id)
