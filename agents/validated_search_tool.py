@@ -2,16 +2,27 @@ from langchain_core.tools import BaseTool
 from langchain_community.tools.tavily_search.tool import TavilySearchResults
 import requests
 from bs4 import BeautifulSoup
-from pydantic import Field
+from pydantic import BaseModel, Field
 import re
+from typing import Optional
+
+
+class WebPageContent(BaseModel):
+    url: str
+    title: str
+    meta_description: str
+    body_text: str
+
+    def __str__(self):
+        return f"URL: {self.url}\nTitle: {self.title}\nMeta Description: {self.meta_description}\nBody Text: {self.body_text}"
 
 
 def clean_text(text: str) -> str:
     return re.sub(r"[^\w\s]", " ", text.lower())
 
 
-def heuristic_validator(link_text: str, candidate_full_name: str):
-    cleaned_link_text = clean_text(link_text)
+def heuristic_validator(web_page_content: WebPageContent, candidate_full_name: str):
+    cleaned_link_text = clean_text(web_page_content)
     cleaned_candidate_full_name = clean_text(candidate_full_name)
     name_parts = cleaned_candidate_full_name.split()
 
@@ -37,11 +48,9 @@ class ValidatedSearchTool(BaseTool):
         )
     )
 
-    def __init__(self):
-        super().__init__()
-        self.search_tool = TavilySearchResults(include_raw_content=True, max_results=5)
-
-    def _fetch_and_validate_url(self, url: str, candidate_full_name: str) -> bool:
+    def _fetch_and_validate_url(
+        self, url: str, candidate_full_name: str
+    ) -> Optional[WebPageContent]:
         try:
             response = requests.get(url, timeout=5)
             if response.status_code == 200:
@@ -50,21 +59,36 @@ class ValidatedSearchTool(BaseTool):
                 meta_description = soup.find("meta", attrs={"name": "description"})
                 meta_text = meta_description.get("content") if meta_description else ""
                 body_text = soup.get_text()
-                return heuristic_validator(
-                    title + meta_text + body_text, candidate_full_name
-                )
-            return False
+                if heuristic_validator(
+                    WebPageContent(
+                        url=url,
+                        title=title,
+                        meta_description=meta_text,
+                        body_text=body_text,
+                    ),
+                    candidate_full_name,
+                ):
+                    return WebPageContent(
+                        url=url,
+                        title=title,
+                        meta_description=meta_text,
+                        body_text=body_text,
+                    )
+            return None
         except Exception as e:
             print(e)
-            return False
+            return None
 
-    def _run(self, query: str, candidate_full_name: str) -> list:
+    def _run(self, query: str, candidate_full_name: str) -> list[WebPageContent]:
         raw_results = self.search_tool.invoke({"query": query})
         validated_results = []
         for result in raw_results:
-            if self._fetch_and_validate_url(result["url"], candidate_full_name):
-                validated_results.append(result)
+            page_content = self._fetch_and_validate_url(
+                result["url"], candidate_full_name
+            )
+            if page_content:
+                validated_results.append(page_content)
         return validated_results
 
-    def _arun(self, query: str, candidate_full_name: str) -> list:
+    def _arun(self, query: str, candidate_full_name: str) -> list[WebPageContent]:
         raise NotImplementedError("This tool does not support async execution.")
