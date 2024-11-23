@@ -23,6 +23,13 @@ class WebPageContent(BaseModel):
         return f"URL: {self.url}\nTitle: {self.title}\nMeta Description: {self.meta_description}\nBody Text: {self.body_text}"
 
 
+llm = AzureChatOpenAI(
+    azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT"),
+    api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+    temperature=0,
+)
+
+
 def clean_text(text: str) -> str:
     return re.sub(r"[^\w\s]", " ", text.lower())
 
@@ -30,7 +37,7 @@ def clean_text(text: str) -> str:
 def heuristic_validator(
     web_page_content: WebPageContent, candidate_full_name: str
 ) -> bool:
-    cleaned_link_text = clean_text(web_page_content)
+    cleaned_link_text = clean_text(str(web_page_content))
     cleaned_candidate_full_name = clean_text(candidate_full_name)
     name_parts = cleaned_candidate_full_name.split()
 
@@ -50,12 +57,6 @@ def heuristic_validator(
 def llm_validator(
     web_page_content: WebPageContent, candidate_full_name: str, candidate_summary: str
 ) -> bool:
-    llm = AzureChatOpenAI(
-        azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT"),
-        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
-        temperature=0,
-    )
-
     prompt = PromptTemplate.from_template(
         """
 You are validating if a webpage's content is relevant to a specific candidate's profile.
