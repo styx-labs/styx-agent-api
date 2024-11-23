@@ -1,10 +1,14 @@
-from langchain_core.tools import BaseTool
-from langchain_community.tools.tavily_search.tool import TavilySearchResults
+import logging
+import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import partial
+from typing import Optional
+
 import requests
 from bs4 import BeautifulSoup
+from langchain_community.tools.tavily_search.tool import TavilySearchResults
+from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
-import re
-from typing import Optional
 
 
 class WebPageContent(BaseModel):
@@ -53,41 +57,57 @@ class ValidatedSearchTool(BaseTool):
     ) -> Optional[WebPageContent]:
         try:
             response = requests.get(url, timeout=5)
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.text, "html.parser")
-                title = soup.title.string if soup.title else ""
-                meta_description = soup.find("meta", attrs={"name": "description"})
-                meta_text = meta_description.get("content") if meta_description else ""
-                body_text = soup.get_text()
-                if heuristic_validator(
-                    WebPageContent(
-                        url=url,
-                        title=title,
-                        meta_description=meta_text,
-                        body_text=body_text,
-                    ),
-                    candidate_full_name,
-                ):
-                    return WebPageContent(
-                        url=url,
-                        title=title,
-                        meta_description=meta_text,
-                        body_text=body_text,
-                    )
+            response.raise_for_status()  # Raise an exception for bad status codes
+
+            soup = BeautifulSoup(response.text, "html.parser")
+            title = soup.title.string if soup.title else ""
+            meta_description = soup.find("meta", attrs={"name": "description"})
+            meta_text = meta_description.get("content") if meta_description else ""
+            body_text = soup.get_text()
+
+            # Create a WebPageContent object to store the page content
+            page_content = WebPageContent(
+                url=url,
+                title=title,
+                meta_description=meta_text,
+                body_text=body_text,
+            )
+
+            if heuristic_validator(page_content, candidate_full_name):
+                return page_content
+            return None
+
+        except requests.RequestException as e:
+            logging.warning(f"Failed to fetch {url}: {str(e)}")
             return None
         except Exception as e:
-            print(e)
+            logging.error(f"Unexpected error processing {url}: {str(e)}")
             return None
 
     def _run(self, query: str, candidate_full_name: str) -> list[WebPageContent]:
         raw_results = self.search_tool.invoke({"query": query})
         validated_results = []
-        for result in raw_results:
-            page_content = self._fetch_and_validate_url(
-                result["url"], candidate_full_name
-            )
-            if page_content:
-                validated_results.append(page_content)
+
+        # Fetch and validate URLs in parallel. Create a partial function to pass the candidate_full_name
+        fetch_and_validate = partial(
+            self._fetch_and_validate_url, candidate_full_name=candidate_full_name
+        )
+
+        # Limit the number of workers to the number of results or 5, whichever is smaller
+        with ThreadPoolExecutor(max_workers=min(5, len(raw_results))) as executor:
+            future_to_url = {
+                executor.submit(fetch_and_validate, result["url"]): result["url"]
+                for result in raw_results
+            }
+            for future in as_completed(future_to_url):
+                url = future_to_url[future]
+                try:
+                    page_content = future.result()
+                    if page_content:
+                        validated_results.append(page_content)
+                except Exception as e:
+                    logging.error(f"Error processing {url}: {str(e)}")
+
         return validated_results
 
     def _arun(self, query: str, candidate_full_name: str) -> list[WebPageContent]:
