@@ -94,8 +94,8 @@ Response (TRUE/FALSE):
 
 
 class ValidatedSearchTool(BaseTool):
-    name = "validated_search_tool"
-    description = "Search the web for information about a candidate and validate the results contain their name."
+    name: str = "validated_search_tool"
+    description: str = "Search the web for information about a candidate and validate the results contain their name."
     search_tool: TavilySearchResults = Field(
         default_factory=lambda: TavilySearchResults(
             include_raw_content=True, max_results=5
