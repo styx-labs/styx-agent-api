@@ -166,3 +166,4 @@ class ValidatedSearchTool(BaseTool):
 
     def _arun(self, query: str, candidate_full_name: str) -> list[WebPageContent]:
         raise NotImplementedError("This tool does not support async execution.")
+    

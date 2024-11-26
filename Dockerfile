@@ -6,6 +6,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 ENV ENVIRONMENT=production
 ENV DB=unilink-agent-db-prod
+ENV PEOPLE_DB=people-db-prod
 
 ENV PORT=8080
 EXPOSE ${PORT}

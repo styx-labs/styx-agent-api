@@ -1,8 +1,11 @@
 from google.cloud import firestore
 import os
+import dotenv
 
-# Initialize Firestore client
+dotenv.load_dotenv()
+
 db = firestore.Client(database=os.getenv("DB"))
+people_db = firestore.Client(database=os.getenv("PEOPLE_DB"))
 
 
 def add_analysis(analysis_data):
@@ -58,3 +61,35 @@ def get_all_analyses():
         )
 
     return analyses
+
+def get_all_locations():
+    """
+    Retrieve all locations from Firestore
+
+    Returns:
+        list: List of locations
+    """
+    docs = people_db.collection("locations").stream()
+
+    locations = []
+    for doc in docs:
+        loc = doc.to_dict()
+        locations.append(loc["location"])
+
+    return locations
+
+def get_all_schools():
+    """
+    Retrieve all schools from Firestore
+
+    Returns:
+        list: List of schools
+    """
+    docs = people_db.collection("schools").stream()
+
+    schools = []
+    for doc in docs:
+        school = doc.to_dict()
+        schools.append(school["school"])
+
+    return schools
