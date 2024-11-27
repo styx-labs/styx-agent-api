@@ -44,7 +44,7 @@ agent_prompt = ChatPromptTemplate.from_messages(
                 \"Harry Gao Capital One\" and \"Harry Gao Washington University\" are good search queries. 
                 Perform 3 different searches for each candidate to find information about them - use all of the results from each search to find information about the candidate (ie do not use only one result from each of the 3 searches). 
                 Return all the relevant urls you find for each candidate - there should be 5-10 urls per candidate. 
-                Please use the tools to find things such as their Github profile, papers/articles/blogs they've written, articles written about them, awards they've won, their social media, the companies they've worked at, the experiences they've had, etc.
+                Please use the tools to find things such as their Github profile, their Linkedin profile, their portfolio, papers/articles/blogs they've written, their social media, the companies they've worked at, etc.
                 Please ensure that each link pertains to the candidate and adds value to the analysis - do not include links that are not relevant to the candidate.
                 After you have found all the information about the candidate, please provide a brief summary of the candidate using the information you found. 
                 Also, for each key trait, please provide a summary of the candidate's performance on that trait using the information you found. 
