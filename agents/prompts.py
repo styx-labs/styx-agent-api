@@ -37,14 +37,15 @@ agent_prompt = ChatPromptTemplate.from_messages(
                 You will be given a list of candidates, a job description, and a list of key traits that the candidates should be evaluated on. 
                 Your task is to find as much information about the candidate as possible that is relevant to the job and the key traits. 
                 You should find things about companies they've worked for, projects they've worked on, the schools they went to, their involvements and extracurriculars at those school, etc. 
-                For each candidate, please use the TavilySearchResults tool to find information online about them.
+                For each candidate, please use the validated_search_tool tool to find information online about them.
                 Create search queries with personally identifiable information about the candidate, like the school the went to, companies they've worked at or founded, where they are from, etc. 
                 Please do not use the skills they have in the search queries, as this will not return accurate Google Search results. 
                 For example, \"Harry Gao software development React Typescript\" is NOT a good search query. 
                 \"Harry Gao Capital One\" and \"Harry Gao Washington University\" are good search queries. 
                 Perform 3 different searches for each candidate to find information about them - use all of the results from each search to find information about the candidate (ie do not use only one result from each of the 3 searches). 
                 Return all the relevant urls you find for each candidate - there should be 5-10 urls per candidate. 
-                Please include things such as their Linkedin, Github, papers/articles/blogs they've written, articles written about them, awards they've won, their social media, the companies they've worked at, the experiences they've had, etc. 
+                Please use the tools to find things such as their Github profile, papers/articles/blogs they've written, articles written about them, awards they've won, their social media, the companies they've worked at, the experiences they've had, etc.
+                Please ensure that each link pertains to the candidate and adds value to the analysis - do not include links that are not relevant to the candidate.
                 After you have found all the information about the candidate, please provide a brief summary of the candidate using the information you found. 
                 Also, for each key trait, please provide a summary of the candidate's performance on that trait using the information you found. 
                 Please provide am integer score between 0 and 10 for each trait based on the information you found.
@@ -63,7 +64,7 @@ agent_prompt = ChatPromptTemplate.from_messages(
                         }},
                         ...
                     ],
-                    "flow": ["step1", "step2", "step3", ...],
+                    "flow": ["Step 1", "Step 2", "Step 3", "Step 4", "Step 5"...],
                 }}
             """,
         ),

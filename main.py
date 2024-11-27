@@ -9,7 +9,10 @@ from agents.run_search_chain import RunSearchChain
 from agents.prompts import key_traits_prompt
 from services.azure_openai import get_azure_openai
 from models import Analysis, JobDescription
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
 
 app = FastAPI()
 

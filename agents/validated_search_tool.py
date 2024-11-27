@@ -10,7 +10,7 @@ from langchain_community.tools.tavily_search.tool import TavilySearchResults
 from langchain_core.tools import BaseTool
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import AzureChatOpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class WebPageContent(BaseModel):
@@ -28,7 +28,6 @@ llm = AzureChatOpenAI(
     api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
     temperature=0,
 )
-
 
 def clean_text(text: str) -> str:
     return re.sub(r"[^\w\s]", " ", text.lower())
@@ -96,10 +95,8 @@ Response (TRUE/FALSE):
 class ValidatedSearchTool(BaseTool):
     name: str = "validated_search_tool"
     description: str = "Search the web for information about a candidate and validate the results contain their name."
-    search_tool: TavilySearchResults = Field(
-        default_factory=lambda: TavilySearchResults(
-            include_raw_content=True, max_results=5
-        )
+    search_tool: TavilySearchResults = TavilySearchResults(
+        include_raw_content=True, max_results=5
     )
 
     def _fetch_and_validate_url(
@@ -123,7 +120,8 @@ class ValidatedSearchTool(BaseTool):
                 body_text=body_text,
             )
 
-            if llm_validator(page_content, candidate_full_name, candidate_summary):
+            # if llm_validator(page_content, candidate_full_name, candidate_summary):
+            if heuristic_validator(page_content, candidate_full_name):
                 return page_content
             return None
 
@@ -137,30 +135,38 @@ class ValidatedSearchTool(BaseTool):
     def _run(
         self, query: str, candidate_full_name: str, candidate_summary: str
     ) -> list[WebPageContent]:
-        raw_results = self.search_tool.invoke({"query": query})
-        validated_results = []
+        try:
+            raw_results = self.search_tool.invoke({"query": query})
 
-        # Fetch and validate URLs in parallel. Create a partial function to pass the candidate_full_name
-        fetch_and_validate = partial(
-            self._fetch_and_validate_url,
-            candidate_full_name=candidate_full_name,
-            candidate_summary=candidate_summary,
-        )
+            validated_results = []
 
-        # Limit the number of workers to the number of results or 5, whichever is smaller
-        with ThreadPoolExecutor(max_workers=min(5, len(raw_results))) as executor:
-            future_to_url = {
-                executor.submit(fetch_and_validate, result["url"]): result["url"]
-                for result in raw_results
-            }
-            for future in as_completed(future_to_url):
-                url = future_to_url[future]
-                try:
-                    page_content = future.result()
-                    if page_content:
-                        validated_results.append(page_content)
-                except Exception as e:
-                    logging.error(f"Error processing {url}: {str(e)}")
+            # Fetch and validate URLs in parallel. Create a partial function to pass the candidate_full_name
+            fetch_and_validate = partial(
+                self._fetch_and_validate_url,
+                candidate_full_name=candidate_full_name,
+                candidate_summary=candidate_summary,
+            )
+
+            # Limit the number of workers to the number of results or 5, whichever is smaller
+            with ThreadPoolExecutor(max_workers=min(5, len(raw_results))) as executor:
+                future_to_url = {
+                    executor.submit(fetch_and_validate, result.get("url")): result.get(
+                        "url"
+                    )
+                    for result in raw_results
+                }
+                for future in as_completed(future_to_url):
+                    url = future_to_url[future]
+                    try:
+                        page_content = future.result()
+                        if page_content:
+                            validated_results.append(page_content)
+                    except Exception as e:
+                        logging.error(f"Error processing {url}: {str(e)}")
+
+        except Exception as e:
+            logging.error(f"Unexpected error in _run: {str(e)}")
+            return []
 
         return validated_results
 

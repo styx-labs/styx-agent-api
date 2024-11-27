@@ -25,8 +25,8 @@ class RunSearchChain:
             temperature=0,
         )
 
-        # search = ValidatedSearchTool()
-        search = TavilySearchResults(include_raw_content=True, max_results=5)
+        search = ValidatedSearchTool()
+        # search = TavilySearchResults(include_raw_content=True, max_results=5)
         tools = [search]
 
         agent = create_tool_calling_agent(llm, tools, agent_prompt)
