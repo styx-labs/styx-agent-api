@@ -11,6 +11,9 @@ from langchain_core.tools import BaseTool
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import AzureChatOpenAI
 from pydantic import BaseModel
+import dotenv
+
+dotenv.load_dotenv()
 
 
 class WebPageContent(BaseModel):

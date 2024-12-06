@@ -5,91 +5,46 @@ import dotenv
 dotenv.load_dotenv()
 
 db = firestore.Client(database=os.getenv("DB"))
-people_db = firestore.Client(database=os.getenv("PEOPLE_DB"))
 
 
-def add_analysis(analysis_data):
-    """
-    Add a new analysis to Firestore
-
-    Args:
-        analysis_data (dict): Dictionary containing analysis data
-
-    Returns:
-        str: Document ID of the created analysis
-    """
-    # Reference to analyses collection
-    analyses_ref = db.collection("analyses")
+def create_job(job_data):
+    ref = db.collection("jobs")
 
     # Add a new document with a generated ID
-    doc_ref = analyses_ref.document()
-    doc_ref.set(analysis_data)
+    doc_ref = ref.document()
+    job_data["id"] = doc_ref.id
+    doc_ref.set(job_data)
 
     return doc_ref.id
 
 
-def remove_analysis(doc_id):
-    db.collection("analyses").document(doc_id).delete()
+def delete_job(job_id):
+    db.collection("jobs").document(job_id).delete()
     return True
 
 
-def get_all_analyses():
-    """
-    Retrieve all analyses from Firestore
+def get_jobs():
+    ref = db.collection("jobs")
+    docs = ref.stream()
+    return [doc.to_dict() for doc in docs]
 
-    Returns:
-        list: List of analysis documents
-    """
-    analyses_ref = db.collection("analyses")
+def get_job(job_id):
+    ref = db.collection("jobs").document(job_id)
+    doc = ref.get()
+    return doc.to_dict()
 
-    # Get all documents, ordered by timestamp descending
-    docs = analyses_ref.order_by(
-        "timestamp", direction=firestore.Query.DESCENDING
-    ).stream()
+def create_candidate(job_id, candidate_data):
+    ref = db.collection("jobs").document(job_id).collection("candidates")
+    doc_ref = ref.document()
+    candidate_data["id"] = doc_ref.id
+    doc_ref.set(candidate_data)
+    return doc_ref.id
 
-    # Convert to list of dictionaries
-    analyses = []
-    for doc in docs:
-        analysis_data = doc.to_dict()
-        analyses.append(
-            {
-                "id": doc.id,
-                "description": analysis_data.get("description"),
-                "result": analysis_data.get("result"),
-                "timestamp": analysis_data.get("timestamp"),
-            }
-        )
+def get_candidates(job_id):
+    ref = db.collection("jobs").document(job_id).collection("candidates")
+    docs = ref.stream()
+    return [doc.to_dict() for doc in docs]
 
-    return analyses
-
-def get_all_locations():
-    """
-    Retrieve all locations from Firestore
-
-    Returns:
-        list: List of locations
-    """
-    docs = people_db.collection("locations").stream()
-
-    locations = []
-    for doc in docs:
-        loc = doc.to_dict()
-        locations.append(loc["location"])
-
-    return locations
-
-def get_all_schools():
-    """
-    Retrieve all schools from Firestore
-
-    Returns:
-        list: List of schools
-    """
-    docs = people_db.collection("schools").stream()
-
-    schools = []
-    for doc in docs:
-        school = doc.to_dict()
-        schools.append(school["school"])
-
-    return schools
+def delete_candidate(job_id, candidate_id):
+    db.collection("jobs").document(job_id).collection("candidates").document(candidate_id).delete()
+    return True
