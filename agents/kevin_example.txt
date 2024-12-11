@@ -1,0 +1,69 @@
+candidate_full_name = "Kevin Jin"
+
+test_candidate = """
+Software Engineer @ Pinterest
+
+Pinterest
+
+Vanderbilt University
+San Francisco, California, United States
+
+Software Engineer
+Pinterest · Full-time
+Jul 2024 - Present · 6 mos
+San Francisco, California, United States
+Analytics InfrastructureA
+Apache Spark, Apache Flink and +3 skills
+
+Software Engineer Intern
+Apple · Internship
+May 2023 - Aug 2023 · 4 mos
+Cupertino, California, United States
+Open Source Program Office (OSPO)
+Natural Language Processing (NLP), Open-Source Software and +3 skills
+
+Software Engineer Intern
+Roblox · Internship
+Mar 2023 - May 2023 · 3 mos
+San Mateo, California, United States
+Next.js, ASP.NET Core and +3 skills
+
+Team Create Presence
+Amazon logo
+Software Engineer Intern
+Amazon · Internship
+Jun 2022 - Aug 2022 · 3 mos
+Seattle, Washington, United States
+Alexa Shopping Conversation Management
+Infrastructure as code (IaC), Amazon Web Services (AWS) and +3 skills
+
+Education
+Vanderbilt University
+Bachelor of Science - BS, Computer Science and Mathematics, Minor in Engineering Management (National Merit Scholar)
+Aug 2020 - May 2024
+Activities and societies: VandyHacks (Director of Content), ChangePlusPlus (Technical Lead), Vanderbilt Commodore Orchestra, Vanderbilt Club Swimming (National Team)Activities and societies: VandyHacks (Director of Content), ChangePlusPlus (Technical Lead), Vanderbilt Commodore Orchestra, Vanderbilt Club Swimming (National Team)
+Teaching Assistant (CS/DS 1100, EECE 2123), Research Assistant (Institute for Software Integrated Systems)Teaching Assistant (CS/DS 1100, EECE 2123), Research Assistant (Institute for Software Integrated Systems)
+"""
+
+test_job = """
+About the role
+You will play a critical role in building our platform, driving the technical direction of our company. This is a hands-on position that will involve working on all things infrastructure, and collaborating with other engineers, designers, and founders. A great opportunity for someone to create a lasting impact not only on the primary product but also on the company's values and vision, given our early stage - we hope Pump would be that career defining opportunity for all of us!
+
+Responsibilities:
+
+Work closely with the rest of the team to design and implement our infrastructure.
+Collaborate with other engineers and designers to build a user-friendly and intuitive platform that meets our customers' needs.
+Help define and execute the technical roadmap for our platform, balancing technical debt and innovation to ensure we can deliver on our business goals.
+Inventing, extending, and maintaining development processes, tools, and workflows.
+Contribute to product roadmap
+Qualifications:
+
+BS or MS in Computer Science, Engineering, or a related field.
+5+ years of experience as a DevOps engineer, with a focus on designing cloud native infrastructures.
+Experience with AWS, GCP, and Azure, and knowledge of AWS, GCP, and Azure cost and billing is a plus.
+Experience with CloudFormation, Terraform, etc.
+Experience with Kubernetes, docker, and distributed systems.
+Having AWS, GCP, and Azure certifications is a plus.
+Strong communication skills and ability to collaborate effectively with cross-functional teams.
+Experience with and enjoys creating prototypes and experimenting quickly.
+"""
