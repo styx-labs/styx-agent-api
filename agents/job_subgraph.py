@@ -1,4 +1,6 @@
-from agents.types import EvaluationState, JobOutputState
+import json
+
+from agents.types import EvaluationState, JobOutputState, SectionRating
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.constants import Send
 from langgraph.graph import StateGraph, START, END
@@ -11,14 +13,20 @@ def write_section(state: EvaluationState):
     sections = []
 
     for requirement in state["sections"]:
-        content = write_section_content(
+        result = write_section_content(
             section=requirement,
             job=job,
             candidate_full_name=state["candidate_full_name"],
             candidate_context=state["candidate_context"],
             source_str=state["source_str"],
         )
-        sections.append({"section": requirement, "content": content})
+        sections.append(
+            {
+                "section": requirement,
+                "content": result.content,
+                "score": result.score,
+            }
+        )
 
     return {"completed_sections": sections}
 
@@ -60,6 +68,13 @@ def write_section_content(
     For example, if you use information from sources 3 and 7, cite them like this: [[3]](url), [[7]](url). 
     Don't include a citation if you are not referencing a source.
 
+    After writing your evaluation, provide a score from 1 to 5 where:
+    1 = No relevant experience or skills
+    2 = Limited relevant experience or skills
+    3 = Some relevant experience or skills
+    4 = Strong relevant experience or skills
+    5 = Exceptional relevant experience or skills
+
     Guidlines for writing:
     - Strict 50-150 word limit
     - No marketing language
@@ -78,8 +93,9 @@ def write_section_content(
     Here are the sources about the candidate:
     {source_str}
     """
+    llm_section_rating = llm.with_structured_output(SectionRating)
 
-    content = llm.invoke(
+    result = llm_section_rating.invoke(
         [
             SystemMessage(
                 content=section_writer_instructions.format(
@@ -98,7 +114,7 @@ def write_section_content(
         ]
     )
 
-    return content.content
+    return result
 
 
 def write_recommendation(state: EvaluationState):
@@ -136,15 +152,18 @@ def write_recommendation(state: EvaluationState):
         [SystemMessage(content=formatted_prompt)]
         + [
             HumanMessage(
-                content="Write a evaluation of the candidate in this specific trait based on the provided information."
+                content="Write a recommendation on how good of a fit the candidate is for the job based on the provided information."
             )
         ]
     )
+    scores = [section["score"] for section in state["completed_sections"]]
+    average_score = sum(scores) / len(scores)
 
     return {
-        "completed_sections": [
-            {"section": "recommendation", "content": content.content}
-        ]
+        "recommendation": {
+            "content": content.content,
+            "score": average_score,
+        }
     }
 
 
@@ -159,9 +178,14 @@ def compile_job_evaluation(state: EvaluationState):
         "company_name": company_name,
         "role": role,
         "sections": [
-            {"section": section["section"], "content": section["content"]}
+            {
+                "section": section["section"],
+                "content": section["content"],
+                "score": section["score"],
+            }
             for section in sections
         ],
+        "recommendation": state["recommendation"],
         # Keep the markdown version for backwards compatibility
         "markdown": f"# Evaluation for {role} at {company_name}\n\n"
         + "\n\n".join(section["content"] for section in sections),

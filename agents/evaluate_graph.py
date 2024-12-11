@@ -173,10 +173,14 @@ def initiate_job_evaluations(state: EvaluationState):
 def compile_final_evaluation(state: EvaluationState):
     """Compiles all job evaluations into final report"""
 
+    sorted_evaluations = sorted(
+        state["evaluations"], key=lambda x: x["recommendation"]["score"], reverse=True
+    )
+
     # Create structured JSON output
     final_evaluation = {
         "candidate_summary": state["candidate_summary"],
-        "job_evaluations": state["evaluations"],
+        "job_evaluations": sorted_evaluations,
         "citations": state["citations"],
     }
 

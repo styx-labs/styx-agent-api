@@ -32,6 +32,7 @@ class EvaluationState(TypedDict):
     company_name: str
     evaluations: Annotated[list, operator.add]
     role: str
+    recommendation: dict
 
 
 class EvaluationInputState(TypedDict):
@@ -45,4 +46,9 @@ class EvaluationOutputState(TypedDict):
 
 
 class JobOutputState(TypedDict):
-    evaluations: list[str]
+    evaluations: list[dict]
+
+
+class SectionRating(BaseModel):
+    score: int
+    content: str
