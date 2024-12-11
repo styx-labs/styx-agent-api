@@ -22,14 +22,13 @@ app.add_middleware(
 )
 
 
-@app.post("/evaluate-graph")
+@app.post("/evaluate")
 async def evaluate_graph(payload: EvaluateGraphPayload):
-    result = await run_search(
+    return await run_search(
         candidate_context=payload.candidate_context,
         candidate_full_name=payload.candidate_full_name,
         number_of_queries=payload.number_of_queries,
     )
-    return {"result": result}
 
 
 @app.post("/get-key-traits")

@@ -93,7 +93,7 @@ def write_section_content(
         ]
         + [
             HumanMessage(
-                content=f"Write a evaluation of the candidate in this specific trait based on the provided information."
+                content="Write a evaluation of the candidate in this specific trait based on the provided information."
             )
         ]
     )
@@ -136,7 +136,7 @@ def write_recommendation(state: EvaluationState):
         [SystemMessage(content=formatted_prompt)]
         + [
             HumanMessage(
-                content=f"Write a recommendation on how good of a fit the candidate is for the job based on the provided information."
+                content="Write a evaluation of the candidate in this specific trait based on the provided information."
             )
         ]
     )
