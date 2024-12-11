@@ -8,6 +8,7 @@ from models import Job, JobDescription, Candidate, EvaluateGraphPayload, Evaluat
 from dotenv import load_dotenv
 from agents.evaluate_graph import run_search
 from services.proxycurl import get_linkedin_context
+from agents.evaluate_graph_noparaform import run_search_
 
 load_dotenv()
 
@@ -77,8 +78,12 @@ def delete_job(job_id: str):
 @app.post("/jobs/{job_id}/candidates")
 async def create_candidate(job_id: str, candidate: Candidate):
     candidate_data = candidate.model_dump()
+    if "url" in candidate_data:
+        name, context = get_linkedin_context(candidate_data["url"])
+        candidate_data["name"] = name
+        candidate_data["context"] = context
     job_data = firestore.get_job(job_id)
-    graph_result = await run_search(
+    graph_result = await run_search_(
         job_data["job_description"],
         candidate_data["context"],
         candidate_data["name"],

@@ -12,8 +12,9 @@ class JobDescription(BaseModel):
 
 
 class Candidate(BaseModel):
-    name: str
-    context: str
+    name: str = None
+    context: str = None
+    url: str = None
 
 
 class EvaluateGraphPayload(BaseModel):
