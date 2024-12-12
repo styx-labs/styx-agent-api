@@ -27,7 +27,7 @@ async def evaluate_graph(payload: EvaluateGraphPayload):
     return await run_search(
         candidate_context=payload.candidate_context,
         candidate_full_name=payload.candidate_full_name,
-        number_of_queries=payload.number_of_queries,
+        number_of_roles=payload.number_of_roles,
     )
 
 

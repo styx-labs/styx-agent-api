@@ -14,41 +14,122 @@ class Queries(BaseModel):
     )
 
 
-class EvaluationState(TypedDict):
-    source_str: str
-    job_description: str
-    candidate_context: str
-    candidate_full_name: str
-    number_of_queries: int
-    search_queries: List[SearchQuery]
-    completed_sections: Annotated[list, operator.add]
-    section: str
-    sections: List[str]
-    citations: str
-    candidate_summary: str
-    relevant_jobs: List[str]
-    current_job: str
-    job_index: int
+class Job(BaseModel):
+    avoid_traits: list[str]
+    benefits: list[str]
+    company_about: str
+    company_description: str
+    company_locations: list[str]
     company_name: str
-    evaluations: Annotated[list, operator.add]
+    equity: str
+    experience_info: str
+    ideal_candidate: str
+    name: str
+    paraform_link: str
+    recruiting_advice: str
+    requirements: list[str]
+    responsibilities: list[str]
+    role_description: str
+    role_locations: list[str]
+    salary_lower_bound: int
+    salary_upper_bound: int
+    tech_stack: list[str]
+    visa_text: str
+    visa_text_more: str
+    workplace: str
+    years_experience_max: str
+    years_experience_min: str
+
+    def __str__(self):
+        return f"""
+                {self.company_name} - {self.name}
+
+                Role Overview:
+                {self.role_description}
+
+                Requirements:
+                • {', '.join(self.requirements)}
+
+                Responsibilities:
+                • {', '.join(self.responsibilities)}
+
+                Ideal Candidate:
+                {self.ideal_candidate}
+
+                Experience:
+                • Required: {self.years_experience_min} - {self.years_experience_max} years
+                • Details: {self.experience_info}
+
+                Tech Stack:
+                • {', '.join(self.tech_stack)}
+
+                Company Information:
+                • About: {self.company_about}
+                • Description: {self.company_description}
+
+                • Things to Note: {', '.join(self.avoid_traits)}
+
+                Recruiting Notes:
+                {self.recruiting_advice}
+
+""".strip()
+
+
+class CandidateInfo(BaseModel):
+    context: str
+    full_name: str
+    summary: str
+
+
+class SearchState(BaseModel):
+    source_str: str
+    search_queries: list[SearchQuery]
+    citations_str: str
+
+
+class SectionRating(BaseModel):
+    section: str
+    score: int
+    content: str
+
+
+class Recommendation(BaseModel):
+    score: float
+    content: str
+
+
+class JobEvaluation(BaseModel):
+    company_name: str
     role: str
-    recommendation: dict
+    sections: Annotated[list[SectionRating], operator.add]
+    recommendation: Recommendation
+    markdown: str
+
+
+class EvaluationState(TypedDict):
+    candidate: CandidateInfo
+    search: SearchState
+    relevant_jobs: list[Job]
+    current_job: Job
+    job_index: int
+    evaluations: Annotated[list[JobEvaluation], operator.add]
+    recommendation: Recommendation
+    number_of_roles: int
+    current_section: str
+    completed_sections: Annotated[list[SectionRating], operator.add]
 
 
 class EvaluationInputState(TypedDict):
     candidate_context: str
     candidate_full_name: str
-    number_of_queries: int
+    number_of_roles: int
 
 
 class EvaluationOutputState(TypedDict):
-    final_evaluation: dict
+    candidate_summary: str
+    evaluations: list[JobEvaluation]
+    citations: str
 
 
 class JobOutputState(TypedDict):
-    evaluations: list[dict]
-
-
-class SectionRating(BaseModel):
-    score: int
-    content: str
+    evaluations: list[JobEvaluation]

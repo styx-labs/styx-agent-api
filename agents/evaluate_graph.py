@@ -14,46 +14,55 @@ from agents.types import (
     EvaluationInputState,
     EvaluationOutputState,
     Queries,
+    Job,
+    CandidateInfo,
+    SearchState,
 )
 from services.firestore import get_most_similar_jobs
 from services.tavily import tavily_search_async
 from services.azure_openai import llm
 
-NUMBER_OF_RELEVANT_JOBS = 5
 
-
-def generate_queries(state: EvaluationState):
-    candidate_context = state["candidate_context"]
-    number_of_queries = state["number_of_queries"]
-    candidate_full_name = state["candidate_full_name"]
+def generate_queries(state: EvaluationInputState):
+    candidate = CandidateInfo(
+        full_name=state["candidate_full_name"],
+        context=state["candidate_context"],
+        summary="",
+    )
 
     structured_llm = llm.with_structured_output(Queries)
     system_instructions_query = report_planner_query_writer_instructions.format(
-        candidate_full_name=candidate_full_name,
-        candidate_context=candidate_context,
-        number_of_queries=number_of_queries,
+        candidate_full_name=candidate.full_name,
+        candidate_context=candidate.context,
+        number_of_queries=5,
     )
     results = structured_llm.invoke(
         [SystemMessage(content=system_instructions_query)]
         + [HumanMessage(content="Generate search queries.")]
     )
-    return {"search_queries": results.queries}
+
+    search_state = SearchState(
+        search_queries=results.queries,
+        citations_str="",
+        source_str="",
+    )
+
+    return {"candidate": candidate, "search": search_state}
 
 
 async def gather_sources(state: EvaluationState):
-    candidate_context = state["candidate_context"]
-    candidate_full_name = state["candidate_full_name"]
-    search_queries = state["search_queries"]
-
-    search_docs = await tavily_search_async(search_queries)
+    search_docs = await tavily_search_async(state["search"].search_queries)
     source_str, citation_str = await deduplicate_and_format_sources(
         search_docs,
         max_tokens_per_source=10000,
-        candidate_full_name=candidate_full_name,
-        candidate_context=candidate_context,
+        candidate_full_name=state["candidate"].full_name,
+        candidate_context=state["candidate"].context,
     )
 
-    return {"source_str": source_str, "citations": citation_str}
+    state["search"].source_str = source_str
+    state["search"].citations_str = citation_str
+
+    return {"search": state["search"]}
 
 
 def write_candidate_summary(state: EvaluationState):
@@ -72,18 +81,13 @@ def write_candidate_summary(state: EvaluationState):
     Here are the sources about the candidate:
     {source_str}
     """
-
-    source_str = state["source_str"]
-    candidate_full_name = state["candidate_full_name"]
-    candidate_context = state["candidate_context"]
-
     content = llm.invoke(
         [
             SystemMessage(
                 content=summary_writer_instructions.format(
-                    candidate_full_name=candidate_full_name,
-                    candidate_context=candidate_context,
-                    source_str=source_str,
+                    candidate_full_name=state["candidate"].full_name,
+                    candidate_context=state["candidate"].context,
+                    source_str=state["search"].source_str,
                 )
             )
         ]
@@ -94,21 +98,38 @@ def write_candidate_summary(state: EvaluationState):
         ]
     )
 
-    return {"candidate_summary": content.content}
+    state["candidate"].summary = content.content
+
+    return {"candidate": state["candidate"]}
 
 
 def get_relevant_jobs(state: EvaluationState):
     """Gets top 10 similar jobs and extracts relevant fields"""
-    jobs = get_most_similar_jobs(state["candidate_summary"], NUMBER_OF_RELEVANT_JOBS)
+    jobs = get_most_similar_jobs(state["candidate"].summary, state["number_of_roles"])
+
+    # Define default values for each field type
+    list_fields = {
+        "avoid_traits",
+        "benefits",
+        "company_locations",
+        "requirements",
+        "responsibilities",
+        "role_locations",
+        "tech_stack",
+    }
 
     fields = [
         "avoid_traits",
-        "company_description",
+        "benefits",
         "company_about",
+        "company_description",
+        "company_locations",
         "company_name",
+        "equity",
         "experience_info",
         "ideal_candidate",
         "name",
+        "paraform_link",
         "recruiting_advice",
         "requirements",
         "responsibilities",
@@ -125,72 +146,47 @@ def get_relevant_jobs(state: EvaluationState):
     ]
 
     return {
-        "relevant_jobs": [{field: job.get(field) for field in fields} for job in jobs]
+        "relevant_jobs": [
+            Job(
+                **{
+                    field: job.get(field, [] if field in list_fields else "")
+                    or ([] if field in list_fields else "")
+                    for field in fields
+                }
+            )
+            for job in jobs
+        ]
     }
 
 
 def initiate_job_evaluations(state: EvaluationState):
     """Initiates parallel evaluation for each job"""
-    tasks = []
-    for i, job in enumerate(state["relevant_jobs"]):
-        # Helper function to handle both string and list values
-        def format_field(field):
-            if isinstance(field, list):
-                return "\n".join(field)
-            return str(field) if field is not None else ""
-
-        # Format each field
-        current_job = "\n\n".join(
-            [
-                format_field(job.get("role_description")),
-                format_field(job.get("responsibilities")),
-                format_field(job.get("requirements")),
-                format_field(job.get("ideal_candidate")),
-                format_field(job.get("recruiting_advice")),
-                format_field(job.get("company_description")),
-                format_field(job.get("experience_info")),
-                format_field(job.get("company_name")),
-                format_field(job.get("company_about")),
-            ]
+    return [
+        Send(
+            f"evaluate_job_{i}",
+            {
+                "job_index": i,
+                "current_job": job,
+                **state,
+            },
         )
-
-        tasks.append(
-            Send(
-                f"evaluate_job_{i}",
-                {
-                    "job_index": i,
-                    "current_job": current_job,
-                    "sections": job["requirements"],
-                    "company_name": job.get("company_name", "Unknown Company"),
-                    "role": job.get("name", "Unknown Role"),
-                    **state,
-                },
-            )
-        )
-    return tasks
+        for i, job in enumerate(state["relevant_jobs"])
+    ]
 
 
 def compile_final_evaluation(state: EvaluationState):
     """Compiles all job evaluations into final report"""
-
-    sorted_evaluations = sorted(
-        state["evaluations"], key=lambda x: x["recommendation"]["score"], reverse=True
-    )
-
-    # Create structured JSON output
-    final_evaluation = {
-        "candidate_summary": state["candidate_summary"],
-        "job_evaluations": sorted_evaluations,
-        "citations": state["citations"],
+    state["evaluations"].sort(key=lambda x: x.recommendation.score, reverse=True)
+    return {
+        "candidate_summary": state["candidate"].summary,
+        "citations": state["search"].citations_str,
     }
-
-    return {"final_evaluation": final_evaluation}
 
 
 async def run_search(
     candidate_context: str,
     candidate_full_name: str,
-    number_of_queries: int,
+    number_of_roles: int,
 ):
     builder = StateGraph(
         EvaluationState, input=EvaluationInputState, output=EvaluationOutputState
@@ -210,17 +206,17 @@ async def run_search(
     builder.add_edge("write_candidate_summary", "get_relevant_jobs")
 
     # Creates subgraphs for each job
-    for i in range(NUMBER_OF_RELEVANT_JOBS):
+    for i in range(number_of_roles):
         builder.add_node(f"evaluate_job_{i}", create_job_evaluation_subgraph(i))
 
     builder.add_conditional_edges(
         "get_relevant_jobs",
         initiate_job_evaluations,
-        [f"evaluate_job_{i}" for i in range(NUMBER_OF_RELEVANT_JOBS)],
+        [f"evaluate_job_{i}" for i in range(number_of_roles)],
     )
 
     # Reduces the subgraphs into a single evaluation
-    for i in range(NUMBER_OF_RELEVANT_JOBS):
+    for i in range(number_of_roles):
         builder.add_edge(f"evaluate_job_{i}", "compile_final_evaluation")
 
     builder.add_edge("compile_final_evaluation", END)
@@ -231,6 +227,6 @@ async def run_search(
         EvaluationInputState(
             candidate_full_name=candidate_full_name,
             candidate_context=candidate_context,
-            number_of_queries=number_of_queries,
+            number_of_roles=number_of_roles,
         )
     )

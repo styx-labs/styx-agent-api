@@ -1,61 +1,69 @@
-import json
-
-from agents.types import EvaluationState, JobOutputState, SectionRating
+from agents.types import (
+    JobEvaluation,
+    EvaluationState,
+    JobOutputState,
+    Recommendation,
+    SectionRating,
+)
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.constants import Send
 from langgraph.graph import StateGraph, START, END
 from services.azure_openai import llm
 
+from agents.types import Job
 
-def write_section(state: EvaluationState):
-    """Modified to handle single job"""
-    job = state["current_job"]
-    sections = []
 
-    for requirement in state["sections"]:
-        result = write_section_content(
-            section=requirement,
-            job=job,
-            candidate_full_name=state["candidate_full_name"],
-            candidate_context=state["candidate_context"],
-            source_str=state["source_str"],
-        )
-        sections.append(
-            {
-                "section": requirement,
-                "content": result.content,
-                "score": result.score,
-            }
-        )
+def initialize_evaluation(state: EvaluationState):
+    evaluation = JobEvaluation(
+        company_name=state["current_job"].company_name,
+        role=state["current_job"].name,
+        sections=[],
+        recommendation=Recommendation(score=0, content=""),
+        markdown="",
+    )
 
-    return {"completed_sections": sections}
+    return {"evaluations": [evaluation]}
 
 
 def initiate_section_writing(state: EvaluationState):
+    job_index = state["job_index"]
     sections = []
     for job in state["relevant_jobs"]:
-        for requirement in job["requirements"]:
+        for section in job.requirements:
             sections.append(
                 Send(
-                    "write_section",
+                    f"write_section_{job_index}",
                     {
-                        "section": requirement,
-                        "job": job,
-                        "company_name": job["company_name"],
-                        "role": job["name"],
+                        "current_section": section,
+                        **state,
                     },
                 )
             )
     return sections
 
 
+def write_section(state: EvaluationState):
+    """Modified to handle single job"""
+    job = state["current_job"]
+
+    section = write_section_content(
+        section=state["current_section"],
+        job=job,
+        candidate_full_name=state["candidate"].full_name,
+        candidate_context=state["candidate"].context,
+        source_str=state["search"].source_str,
+    )
+
+    return {"completed_sections": [section]}
+
+
 def write_section_content(
     section: str,
-    job: str,
+    job: Job,
     candidate_full_name: str,
     candidate_context: str,
     source_str: str,
-):
+) -> SectionRating:
     section_writer_instructions = """
     You are an expert at evaluating candidates for a job.
     You are given a specific trait that you are evaluating the candidate on.
@@ -95,7 +103,7 @@ def write_section_content(
     """
     llm_section_rating = llm.with_structured_output(SectionRating)
 
-    result = llm_section_rating.invoke(
+    return llm_section_rating.invoke(
         [
             SystemMessage(
                 content=section_writer_instructions.format(
@@ -114,15 +122,15 @@ def write_section_content(
         ]
     )
 
-    return result
-
 
 def write_recommendation(state: EvaluationState):
-    candidate_full_name = state["candidate_full_name"]
+    candidate_full_name = state["candidate"].full_name
     completed_sections = state["completed_sections"]
     current_job = state["current_job"]
 
-    completed_sections_str = "\n\n".join([s["content"] for s in completed_sections])
+    completed_sections_str = "\n\n".join(
+        [section.content for section in completed_sections]
+    )
 
     recommmendation_instructions = """
     You are an expert at evaluating candidates for a job.
@@ -144,7 +152,7 @@ def write_recommendation(state: EvaluationState):
     """
 
     formatted_prompt = recommmendation_instructions.format(
-        current_job=current_job,
+        current_job=str(current_job),
         candidate_full_name=candidate_full_name,
         completed_sections=completed_sections_str,
     )
@@ -156,40 +164,30 @@ def write_recommendation(state: EvaluationState):
             )
         ]
     )
-    scores = [section["score"] for section in state["completed_sections"]]
-    average_score = sum(scores) / len(scores)
+    scores = [section.score for section in state["completed_sections"]]
+    average_score = round(sum(scores) / len(scores), 2)
 
     return {
-        "recommendation": {
-            "content": content.content,
-            "score": average_score,
-        }
+        "recommendation": Recommendation(
+            content=content.content,
+            score=average_score,
+        )
     }
 
 
 def compile_job_evaluation(state: EvaluationState):
     """Compiles evaluation for a single job"""
     sections = state["completed_sections"]
-    company_name = state["company_name"]
-    role = state["role"]
 
     # Create structured evaluation object
-    evaluation = {
-        "company_name": company_name,
-        "role": role,
-        "sections": [
-            {
-                "section": section["section"],
-                "content": section["content"],
-                "score": section["score"],
-            }
-            for section in sections
-        ],
-        "recommendation": state["recommendation"],
-        # Keep the markdown version for backwards compatibility
-        "markdown": f"# Evaluation for {role} at {company_name}\n\n"
-        + "\n\n".join(section["content"] for section in sections),
-    }
+    evaluation = JobEvaluation(
+        company_name=state["current_job"].company_name,
+        role=state["current_job"].name,
+        sections=sections,
+        recommendation=state["recommendation"],
+        markdown=f"# Evaluation for {state['current_job'].name} at {state['current_job'].company_name}\n\n"
+        + "\n\n".join(section.content for section in sections),
+    )
 
     return {"evaluations": [evaluation]}
 
@@ -200,12 +198,18 @@ def create_job_evaluation_subgraph(job_index: int):
     builder = StateGraph(EvaluationState, output=JobOutputState)
 
     # Add nodes specific to this job
+    builder.add_node(f"initialize_evaluation_{job_index}", initialize_evaluation)
     builder.add_node(f"write_section_{job_index}", write_section)
     builder.add_node(f"write_recommendation_{job_index}", write_recommendation)
     builder.add_node(f"compile_job_evaluation_{job_index}", compile_job_evaluation)
 
     # Connect nodes
-    builder.add_edge(START, f"write_section_{job_index}")
+    builder.add_edge(START, f"initialize_evaluation_{job_index}")
+    builder.add_conditional_edges(
+        f"initialize_evaluation_{job_index}",
+        initiate_section_writing,
+        [f"write_section_{job_index}"],
+    )
     builder.add_edge(f"write_section_{job_index}", f"write_recommendation_{job_index}")
     builder.add_edge(
         f"write_recommendation_{job_index}", f"compile_job_evaluation_{job_index}"

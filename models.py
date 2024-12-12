@@ -19,4 +19,4 @@ class Candidate(BaseModel):
 class EvaluateGraphPayload(BaseModel):
     candidate_context: str
     candidate_full_name: str
-    number_of_queries: int
+    number_of_roles: int
