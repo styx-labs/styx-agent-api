@@ -12,11 +12,17 @@ class JobDescription(BaseModel):
 
 
 class Candidate(BaseModel):
-    name: str
-    context: str
+    name: str = None
+    context: str = None
+    url: str = None
 
 
 class EvaluateGraphPayload(BaseModel):
     candidate_context: str
     candidate_full_name: str
     number_of_roles: int
+
+
+class EvaluateGraphLinkedinPayload(BaseModel):
+    linkedin_url: str
+    number_of_queries: int

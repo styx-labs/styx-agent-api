@@ -4,9 +4,11 @@ import json
 from services.azure_openai import get_azure_openai
 from agents.prompts import key_traits_prompt
 import services.firestore as firestore
-from models import Job, JobDescription, Candidate, EvaluateGraphPayload
+from models import Job, JobDescription, Candidate, EvaluateGraphPayload, EvaluateGraphLinkedinPayload
 from dotenv import load_dotenv
 from agents.evaluate_graph import run_search
+from services.proxycurl import get_linkedin_context
+from agents.evaluate_graph_noparaform import run_search_
 
 load_dotenv()
 
@@ -30,6 +32,14 @@ async def evaluate_graph(payload: EvaluateGraphPayload):
         number_of_roles=payload.number_of_roles,
     )
 
+@app.post("/evaluate-linkedin")
+async def evaluate_graph_linkedin(payload: EvaluateGraphLinkedinPayload):
+    name, context = get_linkedin_context(payload.linkedin_url)
+    return await run_search(
+        candidate_context=context,
+        candidate_full_name=name,
+        number_of_queries=payload.number_of_queries,
+    )
 
 @app.post("/get-key-traits")
 def get_key_traits(job_description: JobDescription):
@@ -68,8 +78,12 @@ def delete_job(job_id: str):
 @app.post("/jobs/{job_id}/candidates")
 async def create_candidate(job_id: str, candidate: Candidate):
     candidate_data = candidate.model_dump()
+    if "url" in candidate_data:
+        name, context = get_linkedin_context(candidate_data["url"])
+        candidate_data["name"] = name
+        candidate_data["context"] = context
     job_data = firestore.get_job(job_id)
-    graph_result = await run_search(
+    graph_result = await run_search_(
         job_data["job_description"],
         candidate_data["context"],
         candidate_data["name"],
