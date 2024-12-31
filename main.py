@@ -88,9 +88,10 @@ async def create_candidate(job_id: str, candidate: Candidate):
         candidate_data["context"],
         candidate_data["name"],
         job_data["key_traits"],
-        10,
+        5,
     )
-    candidate_data["result"] = graph_result["final_evaluation"]
+    candidate_data["sections"] = graph_result["sections"]
+    candidate_data["citations"] = graph_result["citations"]
     candidate_id = firestore.create_candidate(job_id, candidate_data)
     return {"candidate_id": candidate_id}
 
