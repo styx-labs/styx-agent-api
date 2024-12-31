@@ -10,9 +10,9 @@ from agents.search_helper import (
     report_planner_query_writer_instructions,
 )
 from agents.types import (
-    EvaluationState,
-    EvaluationInputState,
-    EvaluationOutputState,
+    ParaformEvaluationState,
+    ParaformEvaluationInputState,
+    ParaformEvaluationOutputState,
     Queries,
     Job,
     CandidateInfo,
@@ -23,7 +23,7 @@ from services.tavily import tavily_search_async
 from services.azure_openai import llm
 
 
-def generate_queries(state: EvaluationInputState):
+def generate_queries(state: ParaformEvaluationState):
     candidate = CandidateInfo(
         full_name=state["candidate_full_name"],
         context=state["candidate_context"],
@@ -50,7 +50,7 @@ def generate_queries(state: EvaluationInputState):
     return {"candidate": candidate, "search": search_state}
 
 
-async def gather_sources(state: EvaluationState):
+async def gather_sources(state: ParaformEvaluationState):
     search_docs = await tavily_search_async(state["search"].search_queries)
     source_str, citation_str = await deduplicate_and_format_sources(
         search_docs,
@@ -65,7 +65,7 @@ async def gather_sources(state: EvaluationState):
     return {"search": state["search"]}
 
 
-def write_candidate_summary(state: EvaluationState):
+def write_candidate_summary(state: ParaformEvaluationState):
     summary_writer_instructions = """
     You are an expert at evaluating candidates for jobs.
     Write a concise summary of the candidate based on the provided sources.
@@ -103,7 +103,7 @@ def write_candidate_summary(state: EvaluationState):
     return {"candidate": state["candidate"]}
 
 
-def get_relevant_jobs(state: EvaluationState):
+def get_relevant_jobs(state: ParaformEvaluationState):
     """Gets top 10 similar jobs and extracts relevant fields"""
     jobs = get_most_similar_jobs(state["candidate"].summary, state["number_of_roles"])
 
@@ -159,7 +159,7 @@ def get_relevant_jobs(state: EvaluationState):
     }
 
 
-def initiate_job_evaluations(state: EvaluationState):
+def initiate_job_evaluations(state: ParaformEvaluationState):
     """Initiates parallel evaluation for each job"""
     return [
         Send(
@@ -174,7 +174,7 @@ def initiate_job_evaluations(state: EvaluationState):
     ]
 
 
-def compile_final_evaluation(state: EvaluationState):
+def compile_final_evaluation(state: ParaformEvaluationState):
     """Compiles all job evaluations into final report"""
     state["evaluations"].sort(key=lambda x: x.recommendation.score, reverse=True)
     return {
@@ -189,7 +189,9 @@ async def run_search(
     number_of_roles: int,
 ):
     builder = StateGraph(
-        EvaluationState, input=EvaluationInputState, output=EvaluationOutputState
+        ParaformEvaluationState,
+        input=ParaformEvaluationInputState,
+        output=ParaformEvaluationOutputState,
     )
 
     # Main nodes
@@ -224,7 +226,7 @@ async def run_search(
     graph = builder.compile()
 
     return await graph.ainvoke(
-        EvaluationInputState(
+        ParaformEvaluationInputState(
             candidate_full_name=candidate_full_name,
             candidate_context=candidate_context,
             number_of_roles=number_of_roles,
