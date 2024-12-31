@@ -4,13 +4,14 @@ from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from services.azure_openai import llm
 
-report_planner_query_writer_instructions = """You are an expert at researching people online. Your goal is to find detailed information about a candidate for a job opportunity.
+report_planner_query_writer_instructions = """ 
+You are an expert at researching people online. Your goal is to find detailed information about a candidate for a job opportunity.
 The candidate is:
 {candidate_full_name}
 {candidate_context}
-
+The job they're being considered for is:
+{job_description}
 Generate {number_of_queries} search queries that will help gather comprehensive information about this candidate. 
-
 Guidelines for creating effective person-focused queries:
 1. Create simple, direct queries using key identifying information
 2. Avoid complex queries with multiple keywords or technical terms
@@ -20,9 +21,6 @@ Guidelines for creating effective person-focused queries:
    - University publications
    - Personal blogs
    - GitHug repositories
-   - LinkedIn posts
-   - Competitive organizations they are a part of
-
 Make each query specific and focused on one aspect of the candidate's background."""
 
 

@@ -38,7 +38,8 @@ class EvaluationInputState(TypedDict):
 
 
 class EvaluationOutputState(TypedDict):
-    final_evaluation: str
+    citations: str
+    sections: List[dict]
 
 
 class ParaformEvaluationState(TypedDict):
