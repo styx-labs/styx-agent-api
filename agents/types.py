@@ -19,6 +19,33 @@ class EvaluationState(TypedDict):
     job_description: str
     candidate_context: str
     candidate_full_name: str
+    key_traits: List[str]
+    number_of_queries: int
+    search_queries: List[SearchQuery]
+    completed_sections: Annotated[list, operator.add]
+    recommendation: str
+    final_evaluation: str
+    section: str
+    citations: str
+
+
+class EvaluationInputState(TypedDict):
+    job_description: str
+    candidate_context: str
+    candidate_full_name: str
+    key_traits: List[str]
+    number_of_queries: int
+
+
+class EvaluationOutputState(TypedDict):
+    final_evaluation: str
+
+
+class ParaformEvaluationState(TypedDict):
+    source_str: str
+    job_description: str
+    candidate_context: str
+    candidate_full_name: str
     number_of_queries: int
     search_queries: List[SearchQuery]
     completed_sections: Annotated[list, operator.add]
@@ -34,13 +61,13 @@ class EvaluationState(TypedDict):
     role: str
 
 
-class EvaluationInputState(TypedDict):
+class ParaformEvaluationInputState(TypedDict):
     candidate_context: str
     candidate_full_name: str
     number_of_queries: int
 
 
-class EvaluationOutputState(TypedDict):
+class ParaformEvaluationOutputState(TypedDict):
     final_evaluation: dict
 
 

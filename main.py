@@ -4,7 +4,14 @@ import json
 from services.azure_openai import get_azure_openai
 from agents.prompts import key_traits_prompt
 import services.firestore as firestore
-from models import Job, JobDescription, Candidate, EvaluateGraphPayload, EvaluateGraphLinkedinPayload
+from models import (
+    Job,
+    JobDescription,
+    Candidate,
+    ParaformEvaluateGraphPayload,
+    ParaformEvaluateGraphLinkedinPayload,
+    EvaluateGraphPayload,
+)
 from dotenv import load_dotenv
 from agents.evaluate_graph import run_search
 from services.proxycurl import get_linkedin_context
@@ -25,21 +32,34 @@ app.add_middleware(
 
 
 @app.post("/evaluate")
-async def evaluate_graph(payload: EvaluateGraphPayload):
+async def evaluate_graph(payload: ParaformEvaluateGraphPayload):
     return await run_search(
         candidate_context=payload.candidate_context,
         candidate_full_name=payload.candidate_full_name,
         number_of_queries=payload.number_of_queries,
     )
 
+
 @app.post("/evaluate-linkedin")
-async def evaluate_graph_linkedin(payload: EvaluateGraphLinkedinPayload):
+async def evaluate_graph_linkedin(payload: ParaformEvaluateGraphLinkedinPayload):
     name, context = get_linkedin_context(payload.linkedin_url)
     return await run_search(
         candidate_context=context,
         candidate_full_name=name,
         number_of_queries=payload.number_of_queries,
     )
+
+
+@app.post("/evaluate-noparaform")
+async def evaluate_noparaform(payload: EvaluateGraphPayload):
+    return await run_search_(
+        job_description=payload.job_description,
+        candidate_context=payload.candidate_context,
+        candidate_full_name=payload.candidate_full_name,
+        key_traits=payload.key_traits,
+        number_of_queries=payload.number_of_queries,
+    )
+
 
 @app.post("/get-key-traits")
 def get_key_traits(job_description: JobDescription):
