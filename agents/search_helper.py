@@ -212,16 +212,35 @@ async def process_tavily_batch(batch_urls, sources, max_tokens: int, failed_urls
 
 
 async def validate_sources(
-    sources: dict, candidate_full_name: str, candidate_context: str
+    sources: dict,
+    candidate_full_name: str,
+    candidate_context: str,
+    max_tokens: int = 10000,
 ) -> list:
     """Validate and rank sources based on confidence scores."""
+    validated_sources = []
 
     async def validate_single_source(source):
+        # First apply cheap heuristic validation using title/summary
+        initial_content = source.get("content", "") + " " + source.get("title", "")
         if not heuristic_validator(
-            source["raw_content"], source["title"], candidate_full_name
+            initial_content, source["title"], candidate_full_name
         ):
             return None
 
+        # If heuristic passes, fetch full content
+        # try:
+        #     extract_response = await tavily_extract_async(source["url"])
+        #     if not extract_response.get("results"):
+        #         print(f"No results found for {source['url']}")
+        #         return None
+        #     raw_content = extract_response["results"][0]["raw_content"]
+        #     source["raw_content"] = raw_content[: max_tokens * 4]
+        # except Exception as e:
+        #     print(f"Error fetching content for {source['url']}: {e}")
+        #     return None
+
+        # Now do expensive LLM validation with full content
         llm_output = await llm_validator(
             source["raw_content"], candidate_full_name, candidate_context
         )
@@ -268,7 +287,6 @@ async def deduplicate_and_format_sources(
     candidate_full_name: str,
     candidate_context: str,
     max_tokens_per_source: int = 10000,
-    local_scrape: bool = False,
 ) -> tuple[str, list]:
     """Process search results and return formatted sources with citations."""
     # Get unified list of results
@@ -277,18 +295,9 @@ async def deduplicate_and_format_sources(
     # Deduplicate by URL
     unique_sources = {source["url"]: source for source in sources_list}
 
-    # Fetch content for all sources
-    sources, failed_urls = await fetch_content(
-        unique_sources, max_tokens_per_source, local_scrape
-    )
-
-    # Remove failed URLs
-    for url in failed_urls:
-        sources.pop(url, None)
-
-    # Validate and rank sources
+    # Validate sources (includes heuristic -> fetch -> LLM validation -> distill)
     ranked_sources = await validate_sources(
-        sources, candidate_full_name, candidate_context
+        unique_sources, candidate_full_name, candidate_context
     )
 
     # Format final output
