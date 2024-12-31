@@ -3,6 +3,9 @@ import requests
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from services.azure_openai import llm
+from services.tavily import tavily_extract_async
+import asyncio
+import aiohttp
 
 report_planner_query_writer_instructions = """ 
 You are an expert at researching people online. Your goal is to find detailed information about a candidate for a job opportunity.
@@ -131,29 +134,10 @@ async def distill_source(raw_content, candidate_full_name: str):
     return output.content
 
 
-async def deduplicate_and_format_sources(
-    search_response,
-    max_tokens_per_source,
-    candidate_full_name: str,
-    candidate_context: str,
-):
-    """
-    Takes either a single search response or list of responses from Tavily API and formats them.
-    Limits the raw_content to approximately max_tokens_per_source.
-
-    Args:
-        search_response: Either:
-            - A dict with a 'results' key containing a list of search results
-            - A list of dicts, each containing search results
-
-    Returns:
-        tuple:
-            - str: Formatted string with deduplicated and ranked sources
-            - list[dict]: List of citations with URLs and confidence scores
-    """
-    # Convert input to list of results
+async def normalize_search_results(search_response) -> list:
+    """Convert different search response formats into a unified list of results."""
     if isinstance(search_response, dict):
-        sources_list = search_response["results"]
+        return search_response["results"]
     elif isinstance(search_response, list):
         sources_list = []
         for response in search_response:
@@ -161,77 +145,148 @@ async def deduplicate_and_format_sources(
                 sources_list.extend(response["results"])
             else:
                 sources_list.extend(response)
-    else:
-        raise ValueError(
-            "Input must be either a dict with 'results' or a list of search results"
-        )
-
-    # Deduplicate by URL
-    unique_sources = {}
-    for source in sources_list:
-        if source["url"] not in unique_sources:
-            unique_sources[source["url"]] = source
-
-    # Create a list of URLs to remove
-    urls_to_remove = []
-    for source in unique_sources.values():
-        try:
-            result = requests.get(source["url"], timeout=5)
-            content = result.text
-            char_limit = max_tokens_per_source * 4
-            source["raw_content"] = (
-                content[:char_limit] if len(content) > char_limit else content
-            )
-        except Exception:
-            print(f"Error fetching {source['url']}")
-            urls_to_remove.append(source["url"])
-            continue
-
-    # Remove failed URLs after iteration
-    for url in urls_to_remove:
-        del unique_sources[url]
-
-    valid_sources = {}
-    # Validate sources and assign confidence scores
-    for source in unique_sources.values():
-        if heuristic_validator(source["content"], source["title"], candidate_full_name):
-            llm_output = await llm_validator(
-                source["raw_content"], candidate_full_name, candidate_context
-            )
-            if llm_output.confidence > 0.5:
-                valid_sources[source["url"]] = {
-                    "source": source,
-                    "confidence": llm_output.confidence,
-                }
-
-    # Rank sources by confidence descending
-    ranked_sources = sorted(
-        valid_sources.values(), key=lambda x: x["confidence"], reverse=True
+        return sources_list
+    raise ValueError(
+        "Input must be either a dict with 'results' or a list of search results"
     )
 
-    # Assign weights based on confidence
-    for source_info in ranked_sources:
-        source = source_info["source"]
-        source["weight"] = source_info["confidence"]
 
-    # Distill sources with weights
-    for source_info in ranked_sources:
-        source = source_info["source"]
-        source["distilled_content"] = await distill_source(
-            source["raw_content"], candidate_full_name
+async def fetch_content(
+    urls: dict, max_tokens: int, local_scrape: bool
+) -> tuple[dict, list]:
+    """Fetch content for URLs either locally or via Tavily."""
+    sources = urls.copy()
+    failed_urls = []
+
+    if local_scrape:
+        async with aiohttp.ClientSession() as session:
+            # Create tasks for all URLs
+            tasks = []
+            for source in sources.values():
+                tasks.append(fetch_single_url(session, source, max_tokens, failed_urls))
+            # Run all requests concurrently
+            await asyncio.gather(*tasks)
+    else:
+        batch_size = 20
+        url_list = list(urls.keys())
+        # Create tasks for all batches
+        tasks = []
+        for i in range(0, len(url_list), batch_size):
+            batch_urls = url_list[i : i + batch_size]
+            tasks.append(
+                process_tavily_batch(batch_urls, sources, max_tokens, failed_urls)
+            )
+        # Run all batches concurrently
+        await asyncio.gather(*tasks)
+
+    return sources, failed_urls
+
+
+async def fetch_single_url(session, source, max_tokens: int, failed_urls: list):
+    """Helper function to fetch a single URL using aiohttp."""
+    try:
+        async with session.get(source["url"], timeout=5) as response:
+            text = await response.text()
+            char_limit = max_tokens * 4
+            source["raw_content"] = text[:char_limit]
+    except Exception:
+        print(f"Error fetching {source['url']}")
+        failed_urls.append(source["url"])
+
+
+async def process_tavily_batch(batch_urls, sources, max_tokens: int, failed_urls: list):
+    """Helper function to process a single Tavily batch."""
+    try:
+        extract_response = await tavily_extract_async(batch_urls)
+
+        for result in extract_response["results"]:
+            url, content = result["url"], result["raw_content"]
+            if url in sources:
+                sources[url]["raw_content"] = content[: max_tokens * 4]
+
+        failed_urls.extend(
+            failed["url"] for failed in extract_response.get("failed_results", [])
         )
+    except Exception as e:
+        print(f"Error in batch extraction: {e}")
+        failed_urls.extend(batch_urls)
 
-    # Format output
+
+async def validate_sources(
+    sources: dict, candidate_full_name: str, candidate_context: str
+) -> list:
+    """Validate and rank sources based on confidence scores."""
+    valid_sources = []
+
+    for source in sources.values():
+        if not heuristic_validator(
+            source["content"], source["title"], candidate_full_name
+        ):
+            continue
+
+        llm_output = await llm_validator(
+            source["raw_content"], candidate_full_name, candidate_context
+        )
+        if llm_output.confidence > 0.5:
+            source["weight"] = llm_output.confidence
+            source["distilled_content"] = await distill_source(
+                source["raw_content"], candidate_full_name
+            )
+            valid_sources.append(
+                {"source": source, "confidence": llm_output.confidence}
+            )
+
+    return sorted(valid_sources, key=lambda x: x["confidence"], reverse=True)
+
+
+def format_output(ranked_sources: list) -> tuple[str, list]:
+    """Format the final output string and citation list."""
     formatted_text = "Sources:\n\n"
     citation_list = []
+
     for i, source_info in enumerate(ranked_sources, 1):
         source = source_info["source"]
-        formatted_text += f"[{i}]: {source['title']}:\n"
-        formatted_text += f"URL: {source['url']}\n"
-        formatted_text += f"Relevant content from source: {source['distilled_content']} (Confidence: {source_info['confidence']})\n===\n"
+        formatted_text += (
+            f"[{i}]: {source['title']}:\n"
+            f"URL: {source['url']}\n"
+            f"Relevant content from source: {source['distilled_content']} "
+            f"(Confidence: {source_info['confidence']})\n===\n"
+        )
 
         citation_list.append(
             {"index": i, "url": source["url"], "confidence": source_info["confidence"]}
         )
 
     return formatted_text.strip(), citation_list
+
+
+async def deduplicate_and_format_sources(
+    search_response,
+    candidate_full_name: str,
+    candidate_context: str,
+    max_tokens_per_source: int = 10000,
+    local_scrape: bool = False,
+) -> tuple[str, list]:
+    """Process search results and return formatted sources with citations."""
+    # Get unified list of results
+    sources_list = await normalize_search_results(search_response)
+
+    # Deduplicate by URL
+    unique_sources = {source["url"]: source for source in sources_list}
+
+    # Fetch content for all sources
+    sources, failed_urls = await fetch_content(
+        unique_sources, max_tokens_per_source, local_scrape
+    )
+
+    # Remove failed URLs
+    for url in failed_urls:
+        sources.pop(url, None)
+
+    # Validate and rank sources
+    ranked_sources = await validate_sources(
+        sources, candidate_full_name, candidate_context
+    )
+
+    # Format final output
+    return format_output(ranked_sources)

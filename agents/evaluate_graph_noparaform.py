@@ -47,7 +47,6 @@ async def gather_sources(state: EvaluationState):
     search_docs = await tavily_search_async(state["search_queries"])
     source_str, citation_str = await deduplicate_and_format_sources(
         search_docs,
-        max_tokens_per_source=10000,
         candidate_full_name=state["candidate_full_name"],
         candidate_context=state["candidate_context"],
     )
