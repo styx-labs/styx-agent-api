@@ -1,5 +1,4 @@
 import re
-import requests
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from services.azure_openai import llm
@@ -216,13 +215,12 @@ async def validate_sources(
     sources: dict, candidate_full_name: str, candidate_context: str
 ) -> list:
     """Validate and rank sources based on confidence scores."""
-    valid_sources = []
 
-    for source in sources.values():
+    async def validate_single_source(source):
         if not heuristic_validator(
-            source["content"], source["title"], candidate_full_name
+            source["raw_content"], source["title"], candidate_full_name
         ):
-            continue
+            return None
 
         llm_output = await llm_validator(
             source["raw_content"], candidate_full_name, candidate_context
@@ -232,10 +230,15 @@ async def validate_sources(
             source["distilled_content"] = await distill_source(
                 source["raw_content"], candidate_full_name
             )
-            valid_sources.append(
-                {"source": source, "confidence": llm_output.confidence}
-            )
+            return {"source": source, "confidence": llm_output.confidence}
+        return None
 
+    # Process all sources concurrently
+    validation_tasks = [validate_single_source(source) for source in sources.values()]
+    results = await asyncio.gather(*validation_tasks)
+
+    # Filter out None results and sort by confidence
+    valid_sources = [result for result in results if result is not None]
     return sorted(valid_sources, key=lambda x: x["confidence"], reverse=True)
 
 
