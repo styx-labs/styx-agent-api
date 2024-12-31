@@ -14,6 +14,7 @@ from agents.types import (
     EvaluationInputState,
     EvaluationOutputState,
     Queries,
+    SearchQuery,
 )
 
 from services.azure_openai import llm
@@ -36,19 +37,19 @@ def generate_queries(state: EvaluationState):
         [SystemMessage(content=system_instructions_query)]
         + [HumanMessage(content="Generate search queries.")]
     )
+
+    # Add a query for the candidate's name
+    results.queries.append(SearchQuery(search_query=candidate_full_name))
     return {"search_queries": results.queries}
 
 
 async def gather_sources(state: EvaluationState):
-    candidate_context = state["candidate_context"]
-    candidate_full_name = state["candidate_full_name"]
-    search_queries = state["search_queries"]
-    search_docs = await tavily_search_async(search_queries)
+    search_docs = await tavily_search_async(state["search_queries"])
     source_str, citation_str = await deduplicate_and_format_sources(
         search_docs,
         max_tokens_per_source=10000,
-        candidate_full_name=candidate_full_name,
-        candidate_context=candidate_context,
+        candidate_full_name=state["candidate_full_name"],
+        candidate_context=state["candidate_context"],
     )
     return {"source_str": source_str, "citations": citation_str}
 
@@ -102,7 +103,7 @@ def evaluate_trait(state: EvaluationState):
         ]
         + [
             HumanMessage(
-                content=f"Score and evaluate the candidate in this specific trait based on the provided information."
+                content="Score and evaluate the candidate in this specific trait based on the provided information."
             )
         ]
     )
@@ -144,7 +145,7 @@ def write_recommendation(state: EvaluationState):
         [SystemMessage(content=formatted_prompt)]
         + [
             HumanMessage(
-                content=f"Write a recommendation on how good of a fit the candidate is for the job based on the provided information."
+                content="Write a recommendation on how good of a fit the candidate is for the job based on the provided information."
             )
         ]
     )
@@ -192,6 +193,7 @@ async def run_search_(
     builder.add_node("evaluate_trait", evaluate_trait)
     builder.add_node("write_recommendation", write_recommendation)
     builder.add_node("compile_evaluation", compile_evaluation)
+
     builder.add_edge(START, "generate_queries")
     builder.add_edge("generate_queries", "gather_sources")
     builder.add_conditional_edges(
@@ -200,7 +202,9 @@ async def run_search_(
     builder.add_edge("evaluate_trait", "write_recommendation")
     builder.add_edge("write_recommendation", "compile_evaluation")
     builder.add_edge("compile_evaluation", END)
+
     graph = builder.compile()
+
     return await graph.ainvoke(
         EvaluationInputState(
             job_description=job_description,

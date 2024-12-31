@@ -59,7 +59,6 @@ You are a validator determining if a webpage's content is genuinely about a spec
 Candidate Full Name: {candidate_full_name}
 Candidate Profile:
 {candidate_context}
-
 Raw Content: {raw_content}
 
 Use the following guidelines to validate if this webpage is about the candidate in question:
@@ -78,9 +77,7 @@ Use the following guidelines to validate if this webpage is about the candidate 
    - Are there enough specific details to be confident this is about our candidate?
    - Could this content reasonably apply to someone else with the same name?
 
-While you should be very careful in your evaluation, we don't want to reject a valid source. As long as you have reasonable confidence that this is about the candidate in question, you should return `True`.
-
-**Additionally**, provide a confidence score between `0` and `1` indicating how confident you are in your validation.
+While you should be very careful in your evaluation, we don't want to reject a valid source. Provide a confidence score between `0` and `1`, with anything above `0.5` being a valid source.
     """
 
     structured_llm = llm.with_structured_output(LLMValidatorOutput)
@@ -195,7 +192,6 @@ async def deduplicate_and_format_sources(
         del unique_sources[url]
 
     valid_sources = {}
-    citations = []
     # Validate sources and assign confidence scores
     for source in unique_sources.values():
         if heuristic_validator(source["content"], source["title"], candidate_full_name):
