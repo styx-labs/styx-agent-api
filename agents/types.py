@@ -85,6 +85,10 @@ class SearchState(BaseModel):
     source_str: str
     search_queries: list[SearchQuery]
     citations_str: str
+    citations: list[dict] = Field(
+        default_factory=list,
+        description="List of citations with URLs and confidence scores",
+    )
 
 
 class SectionRating(BaseModel):

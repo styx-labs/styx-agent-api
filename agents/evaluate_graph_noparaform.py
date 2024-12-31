@@ -77,6 +77,10 @@ def evaluate_trait(state: EvaluationState):
     {candidate_context}
     Here are the sources about the candidate:
     {source_str}
+
+    When you mention information that you get from a source, please include a citation in your evaluation by citing the number of the source that links to the url in a clickable markdown format.
+    For example, if you use information from sources 3 and 7, cite them like this: [[3]](url), [[7]](url). 
+    Don't include a citation if you are not referencing a source.
     """
 
     structured_llm = llm.with_structured_output(EvaluationOutput)
@@ -126,6 +130,10 @@ def write_recommendation(state: EvaluationState):
     {candidate_full_name}
     Here is the report about the candidate:
     {completed_sections}
+
+    When you mention information that you get from a source, please include a citation in your evaluation by citing the number of the source that links to the url in a clickable markdown format.
+    For example, if you use information from sources 3 and 7, cite them like this: [[3]](url), [[7]](url). 
+    Don't include a citation if you are not referencing a source.
     """
     formatted_prompt = recommmendation_instructions.format(
         job_description=job_description,

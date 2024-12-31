@@ -47,12 +47,12 @@ def heuristic_validator(content, title, candidate_full_name: str) -> bool:
 
 
 class LLMValidatorOutput(BaseModel):
-    is_valid: bool
+    confidence: float
 
 
 async def llm_validator(
     raw_content, candidate_full_name: str, candidate_context: str
-) -> bool:
+) -> LLMValidatorOutput:
     prompt = """
 You are a validator determining if a webpage's content is genuinely about a specific candidate.
 
@@ -63,22 +63,24 @@ Candidate Profile:
 Raw Content: {raw_content}
 
 Use the following guidelines to validate if this webpage is about the candidate in question:
-1. Name Match:
-   - The webpage must explicitly mention the candidate's full name or a clear variation
+1. **Name Match**:
+   - The webpage must explicitly mention the candidate's full name or a clear variation.
 
-2. Context Alignment:
-   - Current or past employers mentioned in the candidate's profile
-   - Educational institutions from the candidate's background
-   - Job titles or roles from the candidate's experience
-   - Projects or achievements mentioned in the candidate's profile
-   - Time periods that align with the candidate's career history
+2. **Context Alignment**:
+   - Current or past employers mentioned in the candidate's profile.
+   - Educational institutions from the candidate's background.
+   - Job titles or roles from the candidate's experience.
+   - Projects or achievements mentioned in the candidate's profile.
+   - Time periods that align with the candidate's career history.
 
-3. Confidence Check:
+3. **Confidence Check**:
    - Is there any conflicting information that suggests this might be about a different person?
    - Are there enough specific details to be confident this is about our candidate?
    - Could this content reasonably apply to someone else with the same name?
 
-While you should be very careful in your evaluation, we don't want to reject a valid source. As long as you have reasonable confidence that this is about the candidate in question, you should return True.
+While you should be very careful in your evaluation, we don't want to reject a valid source. As long as you have reasonable confidence that this is about the candidate in question, you should return `True`.
+
+**Additionally**, provide a confidence score between `0` and `1` indicating how confident you are in your validation.
     """
 
     structured_llm = llm.with_structured_output(LLMValidatorOutput)
@@ -98,7 +100,7 @@ While you should be very careful in your evaluation, we don't want to reject a v
             )
         ]
     )
-    return output.is_valid
+    return output
 
 
 async def distill_source(raw_content, candidate_full_name: str):
@@ -141,7 +143,6 @@ async def deduplicate_and_format_sources(
     """
     Takes either a single search response or list of responses from Tavily API and formats them.
     Limits the raw_content to approximately max_tokens_per_source.
-    include_raw_content specifies whether to include the raw_content from Tavily in the formatted string.
 
     Args:
         search_response: Either:
@@ -149,7 +150,9 @@ async def deduplicate_and_format_sources(
             - A list of dicts, each containing search results
 
     Returns:
-        str: Formatted string with deduplicated sources
+        tuple:
+            - str: Formatted string with deduplicated and ranked sources
+            - list[dict]: List of citations with URLs and confidence scores
     """
     # Convert input to list of results
     if isinstance(search_response, dict):
@@ -192,29 +195,47 @@ async def deduplicate_and_format_sources(
         del unique_sources[url]
 
     valid_sources = {}
-    # Validate sources
+    citations = []
+    # Validate sources and assign confidence scores
     for source in unique_sources.values():
         if heuristic_validator(source["content"], source["title"], candidate_full_name):
-            if await llm_validator(
+            llm_output = await llm_validator(
                 source["raw_content"], candidate_full_name, candidate_context
-            ):
-                valid_sources[source["url"]] = source
+            )
+            if llm_output.confidence > 0.5:
+                valid_sources[source["url"]] = {
+                    "source": source,
+                    "confidence": llm_output.confidence,
+                }
 
-    for source in valid_sources.values():
+    # Rank sources by confidence descending
+    ranked_sources = sorted(
+        valid_sources.values(), key=lambda x: x["confidence"], reverse=True
+    )
+
+    # Assign weights based on confidence
+    for source_info in ranked_sources:
+        source = source_info["source"]
+        source["weight"] = source_info["confidence"]
+
+    # Distill sources with weights
+    for source_info in ranked_sources:
+        source = source_info["source"]
         source["distilled_content"] = await distill_source(
             source["raw_content"], candidate_full_name
         )
 
     # Format output
     formatted_text = "Sources:\n\n"
-    citation_str = "### Citations \n\n"
-    for i, source in enumerate(valid_sources.values(), 1):
+    citation_list = []
+    for i, source_info in enumerate(ranked_sources, 1):
+        source = source_info["source"]
         formatted_text += f"[{i}]: {source['title']}:\n"
         formatted_text += f"URL: {source['url']}\n"
-        formatted_text += (
-            f"Relevant content from source: {source['distilled_content']}\n===\n"
+        formatted_text += f"Relevant content from source: {source['distilled_content']} (Confidence: {source_info['confidence']})\n===\n"
+
+        citation_list.append(
+            {"index": i, "url": source["url"], "confidence": source_info["confidence"]}
         )
 
-        citation_str += f"[{i}] <{source['url']}> \n\n"
-
-    return formatted_text.strip(), citation_str
+    return formatted_text.strip(), citation_list
