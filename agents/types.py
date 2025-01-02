@@ -85,6 +85,10 @@ class SearchState(BaseModel):
     source_str: str
     search_queries: list[SearchQuery]
     citations_str: str
+    citations: list[dict] = Field(
+        default_factory=list,
+        description="List of citations with URLs and confidence scores",
+    )
 
 
 class SectionRating(BaseModel):
@@ -113,7 +117,7 @@ class EvaluationState(TypedDict):
     candidate_full_name: str
     key_traits: List[str]
     number_of_queries: int
-    search_queries: List[SearchQuery]
+    search_queries: list[SearchQuery]
     completed_sections: Annotated[list, operator.add]
     recommendation: str
     final_evaluation: str
@@ -125,13 +129,13 @@ class EvaluationInputState(TypedDict):
     job_description: str
     candidate_context: str
     candidate_full_name: str
-    key_traits: List[str]
+    key_traits: list[str]
     number_of_queries: int
 
 
 class EvaluationOutputState(TypedDict):
     citations: str
-    sections: List[dict]
+    sections: list[dict]
 
 
 class ParaformEvaluationState(TypedDict):
