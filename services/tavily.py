@@ -17,23 +17,3 @@ async def tavily_search_async(search_queries):
             )
         )
     return await asyncio.gather(*search_tasks)
-
-
-@traceable
-async def tavily_extract_async(urls):
-    """Extracts content from URLs using Tavily's Extract API.
-
-    Args:
-        urls: A single URL string or list of URLs (max 20 per batch)
-
-    Returns:
-        dict: Extract API response with results and any failed URLs
-    """
-    if isinstance(urls, str):
-        urls = [urls]
-
-    try:
-        return await tavily_async_client.extract(urls=urls)
-    except Exception as e:
-        print(f"Error in Tavily extract: {e}")
-        raise

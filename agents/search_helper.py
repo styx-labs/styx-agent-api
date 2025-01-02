@@ -2,7 +2,6 @@ import re
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from services.azure_openai import llm
-from services.tavily import tavily_extract_async
 import asyncio
 import aiohttp
 
@@ -150,67 +149,6 @@ async def normalize_search_results(search_response) -> list:
     )
 
 
-async def fetch_content(
-    urls: dict, max_tokens: int, local_scrape: bool
-) -> tuple[dict, list]:
-    """Fetch content for URLs either locally or via Tavily."""
-    sources = urls.copy()
-    failed_urls = []
-
-    if local_scrape:
-        async with aiohttp.ClientSession() as session:
-            # Create tasks for all URLs
-            tasks = []
-            for source in sources.values():
-                tasks.append(fetch_single_url(session, source, max_tokens, failed_urls))
-            # Run all requests concurrently
-            await asyncio.gather(*tasks)
-    else:
-        batch_size = 20
-        url_list = list(urls.keys())
-        # Create tasks for all batches
-        tasks = []
-        for i in range(0, len(url_list), batch_size):
-            batch_urls = url_list[i : i + batch_size]
-            tasks.append(
-                process_tavily_batch(batch_urls, sources, max_tokens, failed_urls)
-            )
-        # Run all batches concurrently
-        await asyncio.gather(*tasks)
-
-    return sources, failed_urls
-
-
-async def fetch_single_url(session, source, max_tokens: int, failed_urls: list):
-    """Helper function to fetch a single URL using aiohttp."""
-    try:
-        async with session.get(source["url"], timeout=5) as response:
-            text = await response.text()
-            char_limit = max_tokens * 4
-            source["raw_content"] = text[:char_limit]
-    except Exception:
-        print(f"Error fetching {source['url']}")
-        failed_urls.append(source["url"])
-
-
-async def process_tavily_batch(batch_urls, sources, max_tokens: int, failed_urls: list):
-    """Helper function to process a single Tavily batch."""
-    try:
-        extract_response = await tavily_extract_async(batch_urls)
-
-        for result in extract_response["results"]:
-            url, content = result["url"], result["raw_content"]
-            if url in sources:
-                sources[url]["raw_content"] = content[: max_tokens * 4]
-
-        failed_urls.extend(
-            failed["url"] for failed in extract_response.get("failed_results", [])
-        )
-    except Exception as e:
-        print(f"Error in batch extraction: {e}")
-        failed_urls.extend(batch_urls)
-
-
 async def validate_sources(
     sources: dict,
     candidate_full_name: str,
@@ -218,7 +156,6 @@ async def validate_sources(
     max_tokens: int = 10000,
 ) -> list:
     """Validate and rank sources based on confidence scores."""
-    validated_sources = []
 
     async def validate_single_source(source):
         # First apply cheap heuristic validation using title/summary
@@ -228,19 +165,6 @@ async def validate_sources(
         ):
             return None
 
-        # If heuristic passes, fetch full content
-        # try:
-        #     extract_response = await tavily_extract_async(source["url"])
-        #     if not extract_response.get("results"):
-        #         print(f"No results found for {source['url']}")
-        #         return None
-        #     raw_content = extract_response["results"][0]["raw_content"]
-        #     source["raw_content"] = raw_content[: max_tokens * 4]
-        # except Exception as e:
-        #     print(f"Error fetching content for {source['url']}: {e}")
-        #     return None
-
-        # Now do expensive LLM validation with full content
         llm_output = await llm_validator(
             source["raw_content"], candidate_full_name, candidate_context
         )

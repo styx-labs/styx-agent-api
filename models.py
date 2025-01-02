@@ -23,7 +23,6 @@ class ParaformEvaluateGraphPayload(BaseModel):
     number_of_roles: int
 
 
-
 class ParaformEvaluateGraphLinkedinPayload(BaseModel):
     linkedin_url: str
     number_of_queries: int
@@ -33,5 +32,3 @@ class EvaluateGraphPayload(BaseModel):
     job_description: str
     candidate_context: str
     candidate_full_name: str
-    key_traits: List[str]
-    number_of_queries: int

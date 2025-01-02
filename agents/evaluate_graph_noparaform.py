@@ -16,7 +16,7 @@ from agents.types import (
     Queries,
     SearchQuery,
 )
-
+from agents.get_key_traits import get_key_traits
 from services.azure_openai import llm
 from services.tavily import tavily_search_async
 
@@ -118,7 +118,9 @@ def write_recommendation(state: EvaluationState):
     completed_sections = state["completed_sections"]
     job_description = state["job_description"]
     completed_sections_str = "\n\n".join([s["content"] for s in completed_sections])
-    overall_score = sum([s["score"] for s in completed_sections])
+    overall_score = sum([s["score"] for s in completed_sections]) / len(
+        completed_sections
+    )
     recommmendation_instructions = """
     You are an expert at evaluating candidates for a job.
     You are given a specific job description and a report evaluating specific areas of the candidate.
@@ -177,13 +179,20 @@ def initiate_evaluation(state: EvaluationState):
     ]
 
 
-async def run_search_(
+async def run_search_no_paraform(
     job_description: str,
     candidate_context: str,
     candidate_full_name: str,
-    key_traits: list[str],
-    number_of_queries: int,
-):
+) -> EvaluationOutputState:
+    NUMBER_OF_QUERIES = 5
+
+    key_traits = get_key_traits(job_description)["key_traits"] or [
+        "Technical Skills",
+        "Experience",
+        "Education",
+        "Entrepreneurship",
+    ]
+
     builder = StateGraph(
         EvaluationState, input=EvaluationInputState, output=EvaluationOutputState
     )
@@ -210,6 +219,6 @@ async def run_search_(
             candidate_context=candidate_context,
             candidate_full_name=candidate_full_name,
             key_traits=key_traits,
-            number_of_queries=number_of_queries,
+            number_of_queries=NUMBER_OF_QUERIES,
         )
     )
