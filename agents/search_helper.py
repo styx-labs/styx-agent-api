@@ -3,9 +3,6 @@ from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from services.azure_openai import llm
 from langsmith import traceable
-import requests
-from bs4 import BeautifulSoup
-import nltk
 
 report_planner_query_writer_instructions = """ 
 You are an expert at researching people online. Your goal is to find detailed information about a candidate for a job opportunity.
@@ -164,38 +161,3 @@ def deduplicate_and_format_sources(
     unique_sources = {source["url"]: source for source in sources_list}
 
     return unique_sources
-
-
-@traceable(name="fetch_url_content")
-def fetch_url_content(url: str) -> str | None:
-    try:
-        with requests.Session() as session:
-            response = session.get(
-                url, 
-                timeout=3,
-                stream=True
-            )
-            response.raise_for_status()
-
-            content = ''
-            for chunk in response.iter_content(chunk_size=8192, decode_unicode=True):
-                if chunk:
-                    content += chunk
-            
-            soup = BeautifulSoup(content, 'html.parser')
-            
-            for script in soup(["script", "style"]):
-                script.extract()
-
-            text = soup.get_text()
-            lines = (line.strip() for line in text.splitlines())
-            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-            text = '\n'.join(chunk for chunk in chunks if chunk)
-            if len(text) <= 200000:
-                return text
-            start = (len(text) - 200000) // 2
-            return text[start:start + 200000]
-            
-    except Exception as e:
-        print(f"Error fetching {url}: {str(e)}")
-        return None

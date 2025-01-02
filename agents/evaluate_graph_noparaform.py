@@ -3,8 +3,6 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.constants import Send
 from langgraph.graph import START, END, StateGraph
 from pydantic import BaseModel
-import asyncio
-
 
 # Local imports
 from agents.search_helper import (
@@ -13,7 +11,6 @@ from agents.search_helper import (
     heuristic_validator,
     llm_validator,
     distill_source,
-    fetch_url_content,
 )
 from agents.types import (
     EvaluationState,
@@ -52,16 +49,6 @@ def generate_queries(state: EvaluationState):
 async def gather_sources(state: dict) -> dict:
     search_docs = await tavily_search_async(state["search_queries"])
     sources_dict = deduplicate_and_format_sources(search_docs)
-    
-    tasks = [
-        asyncio.to_thread(fetch_url_content, url) 
-        for url in sources_dict.keys()
-    ]
-    contents = await asyncio.gather(*tasks)
-    
-    for url, content in zip(sources_dict.keys(), contents):
-        sources_dict[url]['raw_content'] = content
-    
     return {"sources_dict": sources_dict}
 
 
