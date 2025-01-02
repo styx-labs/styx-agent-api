@@ -1,8 +1,5 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import json
-from services.azure_openai import get_azure_openai
-from agents.prompts import key_traits_prompt
 import services.firestore as firestore
 from models import (
     Job,
@@ -12,10 +9,12 @@ from models import (
     ParaformEvaluateGraphLinkedinPayload,
     EvaluateGraphPayload,
 )
+from agents.types import EvaluationOutputState
 from dotenv import load_dotenv
 from agents.evaluate_graph import run_search
 from services.proxycurl import get_linkedin_context
-from agents.evaluate_graph_noparaform import run_search_
+from agents.evaluate_graph_noparaform import run_search_no_paraform
+from agents.get_key_traits import get_key_traits
 
 load_dotenv()
 
@@ -50,30 +49,20 @@ async def evaluate_graph_linkedin(payload: ParaformEvaluateGraphLinkedinPayload)
     )
 
 
-@app.post("/evaluate-noparaform")
-async def evaluate_noparaform(payload: EvaluateGraphPayload):
-    return await run_search_(
+@app.post("/evaluate-no-paraform")
+async def evaluate_no_paraform(
+    payload: EvaluateGraphPayload,
+):
+    return await run_search_no_paraform(
         job_description=payload.job_description,
         candidate_context=payload.candidate_context,
         candidate_full_name=payload.candidate_full_name,
-        key_traits=payload.key_traits,
-        number_of_queries=payload.number_of_queries,
     )
 
 
 @app.post("/get-key-traits")
-def get_key_traits(job_description: JobDescription):
-    client = get_azure_openai()
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": key_traits_prompt},
-            {"role": "user", "content": job_description.description},
-        ],
-        response_format={"type": "json_object"},
-    )
-    traits = json.loads(response.choices[0].message.content)["key_traits"]
-    return {"key_traits": traits}
+def get_key_traits_request(job_description: JobDescription) -> dict:
+    return get_key_traits(job_description.description)
 
 
 @app.post("/jobs")
@@ -103,7 +92,7 @@ async def create_candidate(job_id: str, candidate: Candidate):
         candidate_data["name"] = name
         candidate_data["context"] = context
     job_data = firestore.get_job(job_id)
-    graph_result = await run_search_(
+    graph_result = await run_search_no_paraform(
         job_data["job_description"],
         candidate_data["context"],
         candidate_data["name"],

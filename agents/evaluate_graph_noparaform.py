@@ -19,8 +19,9 @@ from agents.types import (
     EvaluationInputState,
     EvaluationOutputState,
     Queries,
+    SearchQuery,
 )
-
+from agents.get_key_traits import get_key_traits
 from services.azure_openai import llm
 from services.tavily import tavily_search_async
 
@@ -41,64 +42,20 @@ def generate_queries(state: EvaluationState):
         [SystemMessage(content=system_instructions_query)]
         + [HumanMessage(content="Generate search queries.")]
     )
+
+    # Add a query for the candidate's name
+    results.queries.append(SearchQuery(search_query=candidate_full_name))
     return {"search_queries": results.queries}
 
 
 async def gather_sources(state: EvaluationState):
-    search_queries = state["search_queries"]
-    search_docs = await tavily_search_async(search_queries)
-    
-    sources_dict = deduplicate_and_format_sources(
+    search_docs = await tavily_search_async(state["search_queries"])
+    source_str, citation_str = await deduplicate_and_format_sources(
         search_docs,
-        max_tokens_per_source=10000
+        candidate_full_name=state["candidate_full_name"],
+        candidate_context=state["candidate_context"],
     )
-    return {"sources_dict": sources_dict}
-
-
-def initiate_source_validation(state: EvaluationState):
-    return [
-        Send("validate_source", {"source": s, **state}) for s in state["sources_dict"].keys()
-    ]
-
-
-async def validate_source(state: EvaluationState):
-    source = state["source"]
-    source_dict = state["sources_dict"][source]
-    candidate_full_name = state["candidate_full_name"]
-    candidate_context = state["candidate_context"]
-
-    if not heuristic_validator(source_dict["content"], source_dict["title"], candidate_full_name):
-        return {"validated_sources": []}
-    if not llm_validator(source_dict["raw_content"], candidate_full_name, candidate_context):
-        return {"validated_sources": []}
-
-    source_dict["distilled_content"] = distill_source(
-        source_dict["raw_content"], candidate_full_name
-    )
-    source_dict["url"] = source
-
-    return {"validated_sources": [source_dict]}
-
-
-def compile_sources(state: EvaluationState):
-    # validated_sources is now a list of individual source_dicts
-    validated_sources = state.get("validated_sources", [])
-    
-    if not validated_sources:
-        return {"source_str": "", "citations": ""}
-
-    formatted_text = "Sources:\n\n"
-    citation_str = "### Citations \n\n"
-    for i, source in enumerate(validated_sources, 1):
-        formatted_text += f"[{i}]: {source['title']}:\n"
-        formatted_text += f"URL: {source['url']}\n"
-        formatted_text += (
-            f"Relevant content from source: {source['distilled_content']}\n===\n"
-        )
-
-        citation_str += f"[{i}] <{source['url']}> \n\n"
-
-    return {"source_str": formatted_text.strip(), "citations": citation_str}
+    return {"source_str": source_str, "citations": citation_str}
 
 
 def evaluate_trait(state: EvaluationState):
@@ -125,6 +82,10 @@ def evaluate_trait(state: EvaluationState):
     {candidate_context}
     Here are the sources about the candidate:
     {source_str}
+
+    When you mention information that you get from a source, please include a citation in your evaluation by citing the number of the source that links to the url in a clickable markdown format.
+    For example, if you use information from sources 3 and 7, cite them like this: [[3]](url), [[7]](url). 
+    Don't include a citation if you are not referencing a source.
     """
 
     structured_llm = llm.with_structured_output(EvaluationOutput)
@@ -146,7 +107,7 @@ def evaluate_trait(state: EvaluationState):
         ]
         + [
             HumanMessage(
-                content=f"Score and evaluate the candidate in this specific trait based on the provided information."
+                content="Score and evaluate the candidate in this specific trait based on the provided information."
             )
         ]
     )
@@ -162,7 +123,9 @@ def write_recommendation(state: EvaluationState):
     completed_sections = state["completed_sections"]
     job_description = state["job_description"]
     completed_sections_str = "\n\n".join([s["content"] for s in completed_sections])
-    overall_score = sum([s["score"] for s in completed_sections])
+    overall_score = sum([s["score"] for s in completed_sections]) / len(
+        completed_sections
+    )
     recommmendation_instructions = """
     You are an expert at evaluating candidates for a job.
     You are given a specific job description and a report evaluating specific areas of the candidate.
@@ -174,6 +137,10 @@ def write_recommendation(state: EvaluationState):
     {candidate_full_name}
     Here is the report about the candidate:
     {completed_sections}
+
+    When you mention information that you get from a source, please include a citation in your evaluation by citing the number of the source that links to the url in a clickable markdown format.
+    For example, if you use information from sources 3 and 7, cite them like this: [[3]](url), [[7]](url). 
+    Don't include a citation if you are not referencing a source.
     """
     formatted_prompt = recommmendation_instructions.format(
         job_description=job_description,
@@ -184,7 +151,7 @@ def write_recommendation(state: EvaluationState):
         [SystemMessage(content=formatted_prompt)]
         + [
             HumanMessage(
-                content=f"Write a recommendation on how good of a fit the candidate is for the job based on the provided information."
+                content="Write a recommendation on how good of a fit the candidate is for the job based on the provided information."
             )
         ]
     )
@@ -217,13 +184,20 @@ def initiate_evaluation(state: EvaluationState):
     ]
 
 
-async def run_search_(
+async def run_search_no_paraform(
     job_description: str,
     candidate_context: str,
     candidate_full_name: str,
-    key_traits: list[str],
-    number_of_queries: int,
-):
+) -> EvaluationOutputState:
+    NUMBER_OF_QUERIES = 5
+
+    key_traits = get_key_traits(job_description)["key_traits"] or [
+        "Technical Skills",
+        "Experience",
+        "Education",
+        "Entrepreneurship",
+    ]
+
     builder = StateGraph(
         EvaluationState, input=EvaluationInputState, output=EvaluationOutputState
     )
@@ -234,6 +208,7 @@ async def run_search_(
     builder.add_node("evaluate_trait", evaluate_trait)
     builder.add_node("write_recommendation", write_recommendation)
     builder.add_node("compile_evaluation", compile_evaluation)
+
 
     builder.add_edge(START, "generate_queries")
     builder.add_edge("generate_queries", "gather_sources")
@@ -247,13 +222,15 @@ async def run_search_(
     builder.add_edge("evaluate_trait", "write_recommendation")
     builder.add_edge("write_recommendation", "compile_evaluation")
     builder.add_edge("compile_evaluation", END)
+
     graph = builder.compile()
+
     return await graph.ainvoke(
         EvaluationInputState(
             job_description=job_description,
             candidate_context=candidate_context,
             candidate_full_name=candidate_full_name,
             key_traits=key_traits,
-            number_of_queries=number_of_queries,
+            number_of_queries=NUMBER_OF_QUERIES,
         )
     )

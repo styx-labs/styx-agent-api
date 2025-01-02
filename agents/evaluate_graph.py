@@ -42,9 +42,7 @@ def generate_queries(state: ParaformEvaluationState):
     )
 
     search_state = SearchState(
-        search_queries=results.queries,
-        citations_str="",
-        source_str="",
+        search_queries=results.queries, citations_str="", source_str="", citations=[]
     )
 
     return {"candidate": candidate, "search": search_state}
@@ -52,34 +50,41 @@ def generate_queries(state: ParaformEvaluationState):
 
 async def gather_sources(state: ParaformEvaluationState):
     search_docs = await tavily_search_async(state["search"].search_queries)
-    source_str, citation_str = await deduplicate_and_format_sources(
+    source_str, citations = await deduplicate_and_format_sources(
         search_docs,
-        max_tokens_per_source=10000,
         candidate_full_name=state["candidate"].full_name,
         candidate_context=state["candidate"].context,
     )
 
     state["search"].source_str = source_str
-    state["search"].citations_str = citation_str
+    state["search"].citations_str = "\n".join(
+        [
+            f"[{c['index']}]: {c['url']} (Confidence: {c['confidence']})"
+            for c in citations
+        ]
+    )
+    state["search"].citations = citations
 
     return {"search": state["search"]}
 
 
 def write_candidate_summary(state: ParaformEvaluationState):
     summary_writer_instructions = """
-    You are an expert at evaluating candidates for jobs.
-    Write a concise summary of the candidate based on the provided sources.
-    Focus on their technical skills, experience, and achievements.
-    Keep it under 200 words and focus on factual information.
+You are an expert at evaluating candidates for jobs.
+Write a concise summary of the candidate based on the provided sources.
+Focus on their technical skills, experience, and achievements.
+Keep it under 200 words and focus on factual information.
 
-    Here is the candidate's name:
-    {candidate_full_name}
-    
-    Here is the candidate's basic profile:
-    {candidate_context}
-    
-    Here are the sources about the candidate:
-    {source_str}
+Here is the candidate's name:
+{candidate_full_name}
+
+Here is the candidate's basic profile:
+{candidate_context}
+
+Here are the sources about the candidate, ranked by confidence:
+{source_str}
+
+Use the confidence scores to prioritize the information from the sources.
     """
     content = llm.invoke(
         [
@@ -104,7 +109,7 @@ def write_candidate_summary(state: ParaformEvaluationState):
 
 
 def get_relevant_jobs(state: ParaformEvaluationState):
-    """Gets top 10 similar jobs and extracts relevant fields"""
+    """Gets top similar jobs and extracts relevant fields"""
     jobs = get_most_similar_jobs(state["candidate"].summary, state["number_of_roles"])
 
     # Define default values for each field type
@@ -180,6 +185,7 @@ def compile_final_evaluation(state: ParaformEvaluationState):
     return {
         "candidate_summary": state["candidate"].summary,
         "citations": state["search"].citations_str,
+        "citations_detail": state["search"].citations,
     }
 
 
