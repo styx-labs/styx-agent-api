@@ -114,10 +114,13 @@ class EvaluationState(TypedDict):
     key_traits: List[str]
     number_of_queries: int
     search_queries: List[SearchQuery]
-    completed_sections: Annotated[list, operator.add]
+    completed_sections: Annotated[list, operator.add]   # This is for parallelizing section writing
+    validated_sources: Annotated[list, operator.add]   # This is for parallelizing source validation
     recommendation: str
     final_evaluation: str
-    section: str
+    section: str   # This is for parallelizing section writing
+    source: str   # This is for parallelizing source validation
+    sources_dict: dict
     citations: str
 
 

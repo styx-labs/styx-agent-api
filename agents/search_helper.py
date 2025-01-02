@@ -3,6 +3,8 @@ import requests
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from services.azure_openai import llm
+from langsmith import traceable
+
 
 report_planner_query_writer_instructions = """ 
 You are an expert at researching people online. Your goal is to find detailed information about a candidate for a job opportunity.
@@ -50,7 +52,8 @@ class LLMValidatorOutput(BaseModel):
     is_valid: bool
 
 
-async def llm_validator(
+@traceable(name="llm_validator")
+def llm_validator(
     raw_content, candidate_full_name: str, candidate_context: str
 ) -> bool:
     prompt = """
@@ -101,7 +104,8 @@ While you should be very careful in your evaluation, we don't want to reject a v
     return output.is_valid
 
 
-async def distill_source(raw_content, candidate_full_name: str):
+@traceable(name="distill_source")
+def distill_source(raw_content, candidate_full_name: str):
     prompt = """
         You will be given a string of raw content from a webpage.
         Please extract the relevant information about the given person from the raw HTML.
@@ -132,25 +136,12 @@ async def distill_source(raw_content, candidate_full_name: str):
     return output.content
 
 
-async def deduplicate_and_format_sources(
+
+@traceable(name="deduplicate_and_format_sources")
+def deduplicate_and_format_sources(
     search_response,
     max_tokens_per_source,
-    candidate_full_name: str,
-    candidate_context: str,
 ):
-    """
-    Takes either a single search response or list of responses from Tavily API and formats them.
-    Limits the raw_content to approximately max_tokens_per_source.
-    include_raw_content specifies whether to include the raw_content from Tavily in the formatted string.
-
-    Args:
-        search_response: Either:
-            - A dict with a 'results' key containing a list of search results
-            - A list of dicts, each containing search results
-
-    Returns:
-        str: Formatted string with deduplicated sources
-    """
     # Convert input to list of results
     if isinstance(search_response, dict):
         sources_list = search_response["results"]
@@ -172,7 +163,6 @@ async def deduplicate_and_format_sources(
         if source["url"] not in unique_sources:
             unique_sources[source["url"]] = source
 
-    # Create a list of URLs to remove
     urls_to_remove = []
     for source in unique_sources.values():
         try:
@@ -191,30 +181,4 @@ async def deduplicate_and_format_sources(
     for url in urls_to_remove:
         del unique_sources[url]
 
-    valid_sources = {}
-    # Validate sources
-    for source in unique_sources.values():
-        if heuristic_validator(source["content"], source["title"], candidate_full_name):
-            if await llm_validator(
-                source["raw_content"], candidate_full_name, candidate_context
-            ):
-                valid_sources[source["url"]] = source
-
-    for source in valid_sources.values():
-        source["distilled_content"] = await distill_source(
-            source["raw_content"], candidate_full_name
-        )
-
-    # Format output
-    formatted_text = "Sources:\n\n"
-    citation_str = "### Citations \n\n"
-    for i, source in enumerate(valid_sources.values(), 1):
-        formatted_text += f"[{i}]: {source['title']}:\n"
-        formatted_text += f"URL: {source['url']}\n"
-        formatted_text += (
-            f"Relevant content from source: {source['distilled_content']}\n===\n"
-        )
-
-        citation_str += f"[{i}] <{source['url']}> \n\n"
-
-    return formatted_text.strip(), citation_str
+    return unique_sources

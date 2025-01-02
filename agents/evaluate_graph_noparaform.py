@@ -3,11 +3,16 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.constants import Send
 from langgraph.graph import START, END, StateGraph
 from pydantic import BaseModel
+import asyncio
+from tavily import TavilyClient
 
 # Local imports
 from agents.search_helper import (
     deduplicate_and_format_sources,
     report_planner_query_writer_instructions,
+    heuristic_validator,
+    llm_validator,
+    distill_source,
 )
 from agents.types import (
     EvaluationState,
@@ -40,17 +45,60 @@ def generate_queries(state: EvaluationState):
 
 
 async def gather_sources(state: EvaluationState):
-    candidate_context = state["candidate_context"]
-    candidate_full_name = state["candidate_full_name"]
     search_queries = state["search_queries"]
     search_docs = await tavily_search_async(search_queries)
-    source_str, citation_str = await deduplicate_and_format_sources(
+    
+    sources_dict = deduplicate_and_format_sources(
         search_docs,
-        max_tokens_per_source=10000,
-        candidate_full_name=candidate_full_name,
-        candidate_context=candidate_context,
+        max_tokens_per_source=10000
     )
-    return {"source_str": source_str, "citations": citation_str}
+    return {"sources_dict": sources_dict}
+
+
+def initiate_source_validation(state: EvaluationState):
+    return [
+        Send("validate_source", {"source": s, **state}) for s in state["sources_dict"].keys()
+    ]
+
+
+async def validate_source(state: EvaluationState):
+    source = state["source"]
+    source_dict = state["sources_dict"][source]
+    candidate_full_name = state["candidate_full_name"]
+    candidate_context = state["candidate_context"]
+
+    if not heuristic_validator(source_dict["content"], source_dict["title"], candidate_full_name):
+        return {"validated_sources": []}
+    if not llm_validator(source_dict["raw_content"], candidate_full_name, candidate_context):
+        return {"validated_sources": []}
+
+    source_dict["distilled_content"] = distill_source(
+        source_dict["raw_content"], candidate_full_name
+    )
+    source_dict["url"] = source
+
+    return {"validated_sources": [source_dict]}
+
+
+def compile_sources(state: EvaluationState):
+    # validated_sources is now a list of individual source_dicts
+    validated_sources = state.get("validated_sources", [])
+    
+    if not validated_sources:
+        return {"source_str": "", "citations": ""}
+
+    formatted_text = "Sources:\n\n"
+    citation_str = "### Citations \n\n"
+    for i, source in enumerate(validated_sources, 1):
+        formatted_text += f"[{i}]: {source['title']}:\n"
+        formatted_text += f"URL: {source['url']}\n"
+        formatted_text += (
+            f"Relevant content from source: {source['distilled_content']}\n===\n"
+        )
+
+        citation_str += f"[{i}] <{source['url']}> \n\n"
+
+    return {"source_str": formatted_text.strip(), "citations": citation_str}
 
 
 def evaluate_trait(state: EvaluationState):
@@ -181,13 +229,20 @@ async def run_search_(
     )
     builder.add_node("generate_queries", generate_queries)
     builder.add_node("gather_sources", gather_sources)
+    builder.add_node("validate_source", validate_source)
+    builder.add_node("compile_sources", compile_sources)
     builder.add_node("evaluate_trait", evaluate_trait)
     builder.add_node("write_recommendation", write_recommendation)
     builder.add_node("compile_evaluation", compile_evaluation)
+
     builder.add_edge(START, "generate_queries")
     builder.add_edge("generate_queries", "gather_sources")
     builder.add_conditional_edges(
-        "gather_sources", initiate_evaluation, ["evaluate_trait"]
+        "gather_sources", initiate_source_validation, ["validate_source"]
+    )
+    builder.add_edge("validate_source", "compile_sources")
+    builder.add_conditional_edges(
+        "compile_sources", initiate_evaluation, ["evaluate_trait"]
     )
     builder.add_edge("evaluate_trait", "write_recommendation")
     builder.add_edge("write_recommendation", "compile_evaluation")
