@@ -109,6 +109,8 @@ def distill_source(raw_content, candidate_full_name: str):
         Describe what the source is, what it is about, and how it is relevant to the person, etc.
         Write your response in paragraph form.
 
+        Limit the response to 150 words.
+
         Here is the raw content:
         {raw_content}
 
