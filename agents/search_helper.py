@@ -3,9 +3,9 @@ from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from services.azure_openai import llm
 from langsmith import traceable
-
-import asyncio
-import aiohttp
+import requests
+from bs4 import BeautifulSoup
+import nltk
 
 report_planner_query_writer_instructions = """ 
 You are an expert at researching people online. Your goal is to find detailed information about a candidate for a job opportunity.
@@ -136,7 +136,7 @@ def distill_source(raw_content, candidate_full_name: str):
     return output.content
 
 
-async def normalize_search_results(search_response) -> list:
+def normalize_search_results(search_response) -> list:
     """Convert different search response formats into a unified list of results."""
     if isinstance(search_response, dict):
         return search_response["results"]
@@ -153,80 +153,49 @@ async def normalize_search_results(search_response) -> list:
     )
 
 
-async def validate_sources(
-    sources: dict,
-    candidate_full_name: str,
-    candidate_context: str,
-    max_tokens: int = 10000,
-) -> list:
-    """Validate and rank sources based on confidence scores."""
-
-    async def validate_single_source(source):
-        # First apply cheap heuristic validation using title/summary
-        initial_content = source.get("content", "") + " " + source.get("title", "")
-        if not heuristic_validator(
-            initial_content, source["title"], candidate_full_name
-        ):
-            return None
-
-        llm_output = await llm_validator(
-            source["raw_content"], candidate_full_name, candidate_context
-        )
-        if llm_output.confidence > 0.5:
-            source["weight"] = llm_output.confidence
-            source["distilled_content"] = await distill_source(
-                source["raw_content"], candidate_full_name
-            )
-            return {"source": source, "confidence": llm_output.confidence}
-        return None
-
-    # Process all sources concurrently
-    validation_tasks = [validate_single_source(source) for source in sources.values()]
-    results = await asyncio.gather(*validation_tasks)
-
-    # Filter out None results and sort by confidence
-    valid_sources = [result for result in results if result is not None]
-    return sorted(valid_sources, key=lambda x: x["confidence"], reverse=True)
-
-
-def format_output(ranked_sources: list) -> tuple[str, list]:
-    """Format the final output string and citation list."""
-    formatted_text = "Sources:\n\n"
-    citation_list = []
-
-    for i, source_info in enumerate(ranked_sources, 1):
-        source = source_info["source"]
-        formatted_text += (
-            f"[{i}]: {source['title']}:\n"
-            f"URL: {source['url']}\n"
-            f"Relevant content from source: {source['distilled_content']} "
-            f"(Confidence: {source_info['confidence']})\n===\n"
-        )
-
-        citation_list.append(
-            {"index": i, "url": source["url"], "confidence": source_info["confidence"]}
-        )
-
-    return formatted_text.strip(), citation_list
-
-
-async def deduplicate_and_format_sources(
-    search_response,
-    candidate_full_name: str,
-    candidate_context: str,
-    max_tokens_per_source: int = 10000,
-) -> tuple[str, list]:
+def deduplicate_and_format_sources(
+    search_response
+) -> dict:
     """Process search results and return formatted sources with citations."""
     # Get unified list of results
-    sources_list = await normalize_search_results(search_response)
+    sources_list = normalize_search_results(search_response)
 
     # Deduplicate by URL
     unique_sources = {source["url"]: source for source in sources_list}
 
-    # Validate sources (includes heuristic -> fetch -> LLM validation -> distill)
-    ranked_sources = await validate_sources(
-        unique_sources, candidate_full_name, candidate_context
-    )
+    return unique_sources
 
-    # Format final output
-    return format_output(ranked_sources)
+
+@traceable(name="fetch_url_content")
+def fetch_url_content(url: str) -> str | None:
+    try:
+        with requests.Session() as session:
+            response = session.get(
+                url, 
+                timeout=3,
+                stream=True
+            )
+            response.raise_for_status()
+
+            content = ''
+            for chunk in response.iter_content(chunk_size=8192, decode_unicode=True):
+                if chunk:
+                    content += chunk
+            
+            soup = BeautifulSoup(content, 'html.parser')
+            
+            for script in soup(["script", "style"]):
+                script.extract()
+
+            text = soup.get_text()
+            lines = (line.strip() for line in text.splitlines())
+            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+            text = '\n'.join(chunk for chunk in chunks if chunk)
+            if len(text) <= 200000:
+                return text
+            start = (len(text) - 200000) // 2
+            return text[start:start + 200000]
+            
+    except Exception as e:
+        print(f"Error fetching {url}: {str(e)}")
+        return None

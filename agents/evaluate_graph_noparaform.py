@@ -4,7 +4,7 @@ from langgraph.constants import Send
 from langgraph.graph import START, END, StateGraph
 from pydantic import BaseModel
 import asyncio
-from tavily import TavilyClient
+
 
 # Local imports
 from agents.search_helper import (
@@ -13,6 +13,7 @@ from agents.search_helper import (
     heuristic_validator,
     llm_validator,
     distill_source,
+    fetch_url_content,
 )
 from agents.types import (
     EvaluationState,
@@ -48,14 +49,68 @@ def generate_queries(state: EvaluationState):
     return {"search_queries": results.queries}
 
 
-async def gather_sources(state: EvaluationState):
+async def gather_sources(state: dict) -> dict:
     search_docs = await tavily_search_async(state["search_queries"])
-    source_str, citation_str = await deduplicate_and_format_sources(
-        search_docs,
-        candidate_full_name=state["candidate_full_name"],
-        candidate_context=state["candidate_context"],
+    sources_dict = deduplicate_and_format_sources(search_docs)
+    
+    tasks = [
+        asyncio.to_thread(fetch_url_content, url) 
+        for url in sources_dict.keys()
+    ]
+    contents = await asyncio.gather(*tasks)
+    
+    for url, content in zip(sources_dict.keys(), contents):
+        sources_dict[url]['raw_content'] = content
+    
+    return {"sources_dict": sources_dict}
+
+
+def validate_and_distill_source(state: EvaluationState):
+    source = state["sources_dict"][state["source"]]
+    candidate_full_name = state["candidate_full_name"]
+    candidate_context = state["candidate_context"]
+
+    initial_content = source.get("content", "") + " " + source.get("title", "")
+    if not heuristic_validator(
+        initial_content, source["title"], candidate_full_name
+    ):
+        return {"validated_sources": []}
+    
+    llm_output = llm_validator(source["raw_content"], candidate_full_name, candidate_context)
+    if llm_output.confidence <= 0.5:
+        return {"validated_sources": []}
+        
+    source["weight"] = llm_output.confidence
+    source["distilled_content"] = distill_source(
+        source["raw_content"], candidate_full_name
     )
-    return {"source_str": source_str, "citations": citation_str}
+    return {"validated_sources": [source]}
+
+
+def compile_sources(state: EvaluationState):
+    validated_sources = state["validated_sources"]
+    ranked_sources = sorted(validated_sources, key=lambda x: x["weight"], reverse=True)
+
+    formatted_text = "Sources:\n\n"
+    citation_list = []
+
+    for i, source in enumerate(ranked_sources, 1):
+        formatted_text += (
+            f"[{i}]: {source['title']}:\n"
+            f"URL: {source['url']}\n"
+            f"Relevant content from source: {source['distilled_content']} "
+            f"(Confidence: {source['weight']})\n===\n"
+        )
+
+        citation_list.append(
+            {"index": i, "url": source["url"], "confidence": source["weight"]}
+        )
+
+    return {"source_str": formatted_text.strip(), "citations": citation_list}
+
+
+def initiate_source_validation(state: EvaluationState):
+    return [Send("validate_and_distill_source", {"source": source, **state}) for source in state["sources_dict"].keys()]
 
 
 def evaluate_trait(state: EvaluationState):
@@ -203,7 +258,7 @@ async def run_search_no_paraform(
     )
     builder.add_node("generate_queries", generate_queries)
     builder.add_node("gather_sources", gather_sources)
-    builder.add_node("validate_source", validate_source)
+    builder.add_node("validate_and_distill_source", validate_and_distill_source)
     builder.add_node("compile_sources", compile_sources)
     builder.add_node("evaluate_trait", evaluate_trait)
     builder.add_node("write_recommendation", write_recommendation)
@@ -213,9 +268,9 @@ async def run_search_no_paraform(
     builder.add_edge(START, "generate_queries")
     builder.add_edge("generate_queries", "gather_sources")
     builder.add_conditional_edges(
-        "gather_sources", initiate_source_validation, ["validate_source"]
+        "gather_sources", initiate_source_validation, ["validate_and_distill_source"]
     )
-    builder.add_edge("validate_source", "compile_sources")
+    builder.add_edge("validate_and_distill_source", "compile_sources")
     builder.add_conditional_edges(
         "compile_sources", initiate_evaluation, ["evaluate_trait"]
     )

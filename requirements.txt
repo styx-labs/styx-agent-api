@@ -14,3 +14,4 @@ azure-ai-textanalytics==5.2.0
 beautifulsoup4
 langgraph
 tavily-python
+urllib3

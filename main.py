@@ -53,10 +53,16 @@ async def evaluate_graph_linkedin(payload: ParaformEvaluateGraphLinkedinPayload)
 async def evaluate_no_paraform(
     payload: EvaluateGraphPayload,
 ):
+    candidate_data = payload.model_dump()
+    if "url" in candidate_data:
+        name, context = get_linkedin_context(candidate_data["url"])
+        candidate_data["name"] = name
+        candidate_data["context"] = context
+
     return await run_search_no_paraform(
-        job_description=payload.job_description,
-        candidate_context=payload.candidate_context,
-        candidate_full_name=payload.candidate_full_name,
+        job_description=candidate_data["job_description"],
+        candidate_context=candidate_data["context"],
+        candidate_full_name=candidate_data["name"],
     )
 
 
