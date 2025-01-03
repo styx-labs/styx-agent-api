@@ -54,7 +54,7 @@ async def evaluate_no_paraform(
     payload: EvaluateGraphPayload,
 ):
     candidate_data = payload.model_dump()
-    if "url" in candidate_data:
+    if candidate_data.get("url"):
         name, context = get_linkedin_context(candidate_data["url"])
         candidate_data["name"] = name
         candidate_data["context"] = context

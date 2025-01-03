@@ -5,16 +5,13 @@ import dotenv
 
 dotenv.load_dotenv()
 
+
 def get_linkedin_context(url):
     api_key = os.getenv("PROXYCURL_API_KEY")
-    headers = {'Authorization': 'Bearer ' + api_key}
-    api_endpoint = 'https://nubela.co/proxycurl/api/v2/linkedin'
-    params = {
-        'linkedin_profile_url': url
-    }
-    response = requests.get(api_endpoint,
-                        params=params,
-                        headers=headers)
+    headers = {"Authorization": "Bearer " + api_key}
+    api_endpoint = "https://nubela.co/proxycurl/api/v2/linkedin"
+    params = {"linkedin_profile_url": url}
+    response = requests.get(api_endpoint, params=params, headers=headers)
     response = response.json()
     name = response["full_name"]
     context = ""
@@ -38,4 +35,3 @@ def get_linkedin_context(url):
             if "school" in e and "degree_name" in e and "field_of_study" in e:
                 context += f"Education: {e['school']}; {e['degree_name']} in {e['field_of_study']}\n"
     return name, context
-
