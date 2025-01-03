@@ -90,7 +90,7 @@ def compile_sources(state: EvaluationState):
         )
 
         citation_list.append(
-            {"index": i, "url": source["url"], "confidence": source["weight"]}
+            {"index": i, "url": source["url"], "confidence": source["weight"], "distilled_content": source["distilled_content"]}
         )
 
     return {"source_str": formatted_text.strip(), "citations": citation_list}
@@ -214,6 +214,8 @@ def compile_evaluation(state: EvaluationState):
         for section in completed_sections:
             if section["section"] == trait:
                 ordered_sections.append(section)
+
+    print(type(citations))
     return {"sections": ordered_sections, "citations": citations}
 
 
