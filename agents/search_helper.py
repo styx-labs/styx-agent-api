@@ -1,27 +1,23 @@
 import re
-from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from services.azure_openai import llm
 from langsmith import traceable
-
-report_planner_query_writer_instructions = """ 
-You are an expert at researching people online. Your goal is to find detailed information about a candidate for a job opportunity.
-The candidate is:
-{candidate_full_name}
-{candidate_context}
-The job they're being considered for is:
-{job_description}
-Generate {number_of_queries} search queries that will help gather comprehensive information about this candidate. 
-Guidelines for creating effective person-focused queries:
-1. Create simple, direct queries using key identifying information
-2. Avoid complex queries with multiple keywords or technical terms
-3. Focus on finding the candidate's digital presence
-4. Include queries that might surface profiles, articles, or mentions from:
-   - Professional organizations and news
-   - University publications
-   - Personal blogs
-   - GitHug repositories
-Make each query specific and focused on one aspect of the candidate's background."""
+from agents.types import (
+    KeyTraitsOutput,
+    QueriesOutput,
+    ValidationOutput,
+    DistillSourceOutput,
+    RecommendationOutput,
+    TraitEvaluationOutput,
+)
+from agents.prompts import (
+    key_traits_prompt,
+    validation_prompt,
+    distill_source_prompt,
+    recommendation_prompt,
+    trait_evaluation_prompt,
+    search_query_prompt
+)
 
 
 def clean_text(text: str) -> str:
@@ -46,46 +42,41 @@ def heuristic_validator(content, title, candidate_full_name: str) -> bool:
     return score >= 0.5
 
 
-class LLMValidatorOutput(BaseModel):
-    confidence: float
-
+@traceable(name="get_search_queries")
+def get_search_queries(
+    candidate_full_name: str, 
+    candidate_context: str, 
+    job_description: str, 
+    number_of_queries: int
+) -> QueriesOutput:
+    structured_llm = llm.with_structured_output(QueriesOutput)
+    output = structured_llm.invoke(
+        [
+            SystemMessage(
+                content=search_query_prompt.format(
+                    candidate_full_name=candidate_full_name, 
+                    candidate_context=candidate_context, 
+                    job_description=job_description, 
+                    number_of_queries=number_of_queries
+                )
+            )
+        ]
+        + [
+            HumanMessage(content="Generate search queries.")
+        ]
+    )
+    return output
+           
 
 @traceable(name="llm_validator")
 def llm_validator(
     raw_content, candidate_full_name: str, candidate_context: str
-) -> LLMValidatorOutput:
-    prompt = """
-You are a validator determining if a webpage's content is genuinely about a specific candidate.
-
-Candidate Full Name: {candidate_full_name}
-Candidate Profile:
-{candidate_context}
-Raw Content: {raw_content}
-
-Use the following guidelines to validate if this webpage is about the candidate in question:
-1. **Name Match**:
-   - The webpage must explicitly mention the candidate's full name or a clear variation.
-
-2. **Context Alignment**:
-   - Current or past employers mentioned in the candidate's profile.
-   - Educational institutions from the candidate's background.
-   - Job titles or roles from the candidate's experience.
-   - Projects or achievements mentioned in the candidate's profile.
-   - Time periods that align with the candidate's career history.
-
-3. **Confidence Check**:
-   - Is there any conflicting information that suggests this might be about a different person?
-   - Are there enough specific details to be confident this is about our candidate?
-   - Could this content reasonably apply to someone else with the same name?
-
-While you should be very careful in your evaluation, we don't want to reject a valid source. Provide a confidence score between `0` and `1`, with anything above `0.5` being a valid source.
-    """
-
-    structured_llm = llm.with_structured_output(LLMValidatorOutput)
+) -> ValidationOutput:
+    structured_llm = llm.with_structured_output(ValidationOutput)
     output = structured_llm.invoke(
         [
             SystemMessage(
-                content=prompt.format(
+                content=validation_prompt.format(
                     candidate_full_name=candidate_full_name,
                     candidate_context=candidate_context,
                     raw_content=raw_content,
@@ -102,26 +93,15 @@ While you should be very careful in your evaluation, we don't want to reject a v
 
 
 @traceable(name="distill_source")
-def distill_source(raw_content, candidate_full_name: str):
-    prompt = """
-        You will be given a string of raw content from a webpage.
-        Please extract the relevant information about the given person from the raw HTML.
-        Describe what the source is, what it is about, and how it is relevant to the person, etc.
-        Write your response in paragraph form.
-
-        Limit the response to 150 words.
-
-        Here is the raw content:
-        {raw_content}
-
-        Here is the person's full name:
-        {candidate_full_name}
-    """
-
-    output = llm.invoke(
+def distill_source(
+    raw_content, 
+    candidate_full_name: str
+) -> DistillSourceOutput:
+    structured_llm = llm.with_structured_output(DistillSourceOutput)
+    output = structured_llm.invoke(
         [
             SystemMessage(
-                content=prompt.format(
+                content=distill_source_prompt.format(
                     raw_content=raw_content, candidate_full_name=candidate_full_name
                 )
             )
@@ -132,7 +112,7 @@ def distill_source(raw_content, candidate_full_name: str):
             )
         ]
     )
-    return output.content
+    return output
 
 
 def normalize_search_results(search_response) -> list:
@@ -163,3 +143,79 @@ def deduplicate_and_format_sources(
     unique_sources = {source["url"]: source for source in sources_list}
 
     return unique_sources
+
+
+@traceable(name="get_key_traits")
+def get_key_traits(
+    job_description: str
+) -> KeyTraitsOutput:
+    structured_llm = llm.with_structured_output(KeyTraitsOutput)
+    output = structured_llm.invoke(
+        [
+            SystemMessage(
+                content=key_traits_prompt.format(
+                    job_description=job_description
+                )
+            )
+        ]
+        + [
+            HumanMessage(
+                content="Generate a list of key traits relevant to the job description."
+            )
+        ]
+    )
+    return output
+
+
+@traceable(name="get_recommendation")
+def get_recommendation(
+    job_description: str, 
+    candidate_full_name: str, 
+    completed_sections: str
+) -> RecommendationOutput:
+    structured_llm = llm.with_structured_output(RecommendationOutput)
+    output = structured_llm.invoke(
+        [
+            SystemMessage(
+                content=recommendation_prompt.format(
+                job_description=job_description, 
+                candidate_full_name=candidate_full_name, 
+                completed_sections=completed_sections
+                )
+            )
+        ]
+        + [
+            HumanMessage(
+                content="Write a recommendation on how good of a fit the candidate is for the job based on the provided information."
+            )
+        ]
+    )
+    return output
+
+
+@traceable(name="get_trait_evaluation")
+def get_trait_evaluation(
+    section: str, 
+    candidate_full_name: str, 
+    candidate_context: str, 
+    source_str: str
+) -> TraitEvaluationOutput:
+    structured_llm = llm.with_structured_output(TraitEvaluationOutput)
+    output = structured_llm.invoke(
+        [
+            SystemMessage(
+                content=trait_evaluation_prompt.format(
+                    section=section,
+                    candidate_full_name=candidate_full_name,
+                    candidate_context=candidate_context,
+                    source_str=source_str,
+                )
+            )
+        ]
+        + [
+            HumanMessage(
+                content="Score and evaluate the candidate in this specific trait based on the provided information."
+            )
+        ]
+    )
+    return output

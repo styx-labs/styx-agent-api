@@ -5,19 +5,15 @@ from models import (
     Job,
     JobDescription,
     Candidate,
-    ParaformEvaluateGraphPayload,
-    ParaformEvaluateGraphLinkedinPayload,
-    EvaluateGraphPayload,
+    HeadlessEvaluatePayload,
 )
-from agents.types import EvaluationOutputState
 from dotenv import load_dotenv
-from agents.evaluate_graph import run_search
 from services.proxycurl import get_linkedin_context
-from agents.evaluate_graph_noparaform import run_search_no_paraform
-from agents.get_key_traits import get_key_traits
+from agents.evaluate_graph import run_search
+from agents.search_helper import get_key_traits
+
 
 load_dotenv()
-
 
 app = FastAPI()
 
@@ -30,28 +26,9 @@ app.add_middleware(
 )
 
 
-@app.post("/evaluate")
-async def evaluate_graph(payload: ParaformEvaluateGraphPayload):
-    return await run_search(
-        candidate_context=payload.candidate_context,
-        candidate_full_name=payload.candidate_full_name,
-        number_of_roles=payload.number_of_roles,
-    )
-
-
-@app.post("/evaluate-linkedin")
-async def evaluate_graph_linkedin(payload: ParaformEvaluateGraphLinkedinPayload):
-    name, context = get_linkedin_context(payload.linkedin_url)
-    return await run_search(
-        candidate_context=context,
-        candidate_full_name=name,
-        number_of_queries=payload.number_of_queries,
-    )
-
-
-@app.post("/evaluate-no-paraform")
-async def evaluate_no_paraform(
-    payload: EvaluateGraphPayload,
+@app.post("/evaluate-headless")
+async def evaluate_headless(
+    payload: HeadlessEvaluatePayload,
 ):
     candidate_data = payload.model_dump()
     if candidate_data.get("url"):
@@ -59,10 +36,23 @@ async def evaluate_no_paraform(
         candidate_data["name"] = name
         candidate_data["context"] = context
 
-    return await run_search_no_paraform(
+    if not candidate_data["job_description"]:
+        candidate_data["key_traits"] = [
+            "Technical Skills",
+            "Experience",
+            "Education",
+            "Entrepreneurship",
+        ]
+    else:
+        candidate_data["key_traits"] = get_key_traits(candidate_data["job_description"]).key_traits
+
+    return await run_search(
         job_description=candidate_data["job_description"],
         candidate_context=candidate_data["context"],
         candidate_full_name=candidate_data["name"],
+        key_traits=candidate_data["key_traits"],
+        number_of_queries=candidate_data["number_of_queries"],
+        confidence_threshold=candidate_data["confidence_threshold"],
     )
 
 
@@ -98,11 +88,13 @@ async def create_candidate(job_id: str, candidate: Candidate):
         candidate_data["name"] = name
         candidate_data["context"] = context
     job_data = firestore.get_job(job_id)
-    graph_result = await run_search_no_paraform(
+    graph_result = await run_search(
         job_data["job_description"],
         candidate_data["context"],
         candidate_data["name"],
         job_data["key_traits"],
+        candidate_data["number_of_queries"],
+        candidate_data["confidence_threshold"],
     )
     candidate_data["sections"] = graph_result["sections"]
     candidate_data["citations"] = graph_result["citations"]
