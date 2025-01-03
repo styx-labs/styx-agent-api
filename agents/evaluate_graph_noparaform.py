@@ -58,15 +58,15 @@ def validate_and_distill_source(state: EvaluationState):
     candidate_context = state["candidate_context"]
 
     initial_content = source.get("content", "") + " " + source.get("title", "")
-    if not heuristic_validator(
-        initial_content, source["title"], candidate_full_name
-    ):
+    if not heuristic_validator(initial_content, source["title"], candidate_full_name):
         return {"validated_sources": []}
-    
-    llm_output = llm_validator(source["raw_content"], candidate_full_name, candidate_context)
+
+    llm_output = llm_validator(
+        source["raw_content"], candidate_full_name, candidate_context
+    )
     if llm_output.confidence <= 0.5:
         return {"validated_sources": []}
-        
+
     source["weight"] = llm_output.confidence
     source["distilled_content"] = distill_source(
         source["raw_content"], candidate_full_name
@@ -97,7 +97,10 @@ def compile_sources(state: EvaluationState):
 
 
 def initiate_source_validation(state: EvaluationState):
-    return [Send("validate_and_distill_source", {"source": source, **state}) for source in state["sources_dict"].keys()]
+    return [
+        Send("validate_and_distill_source", {"source": source, **state})
+        for source in state["sources_dict"].keys()
+    ]
 
 
 def evaluate_trait(state: EvaluationState):
@@ -117,7 +120,7 @@ def evaluate_trait(state: EvaluationState):
     - A string of text that is the evaluation of the candidate in this specific trait based on the provided information. This should be a no more than 100 words.
 
     In the string of text, when you mention information that you get from a source, please include a citation in your evaluation by citing the number of the source that links to the url in a clickable markdown format.
-    For example, if you use information from sources 3 and 7, cite them like this: [[3]](url), [[7]](url). 
+    For example, if you use information from sources 3 and 7, cite them like this: [3](url), [7](url). 
     Don't include a citation if you are not referencing a source.
     Cite sources liberally.
 
@@ -180,6 +183,10 @@ def write_recommendation(state: EvaluationState):
     {candidate_full_name}
     Here is the report about the candidate:
     {completed_sections}
+
+    When you mention information that you get from a source, please include a citation in your evaluation by citing the number of the source that links to the url in a clickable markdown format.
+    For example, if you use information from sources 3 and 7, cite them like this: [3](url), [7](url). 
+    Don't include a citation if you are not referencing a source.
     """
     formatted_prompt = recommmendation_instructions.format(
         job_description=job_description,
@@ -250,7 +257,6 @@ async def run_search_no_paraform(
     builder.add_node("evaluate_trait", evaluate_trait)
     builder.add_node("write_recommendation", write_recommendation)
     builder.add_node("compile_evaluation", compile_evaluation)
-
 
     builder.add_edge(START, "generate_queries")
     builder.add_edge("generate_queries", "gather_sources")
