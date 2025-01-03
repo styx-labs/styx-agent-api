@@ -73,7 +73,7 @@ def write_section_content(
     
     Each source is cited by a number.
     When you mention information that you get from a source, please include a citation in your evaluation by citing the number of the source that links to the url in a clickable markdown format.
-    For example, if you use information from sources 3 and 7, cite them like this: [[3]](url), [[7]](url). 
+    For example, if you use information from sources 3 and 7, cite them like this: [3](url), [7](url). 
     Don't include a citation if you are not referencing a source.
 
     After writing your evaluation, provide a score from 1 to 5 where:
