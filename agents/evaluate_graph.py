@@ -1,240 +1,192 @@
-# Third party imports
-from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.constants import Send
 from langgraph.graph import START, END, StateGraph
-
-# Local imports
-from agents.job_subgraph import create_job_evaluation_subgraph
 from agents.search_helper import (
     deduplicate_and_format_sources,
-    report_planner_query_writer_instructions,
+    heuristic_validator,
+    llm_validator,
+    distill_source,
+    get_key_traits,
+    get_recommendation,
+    get_trait_evaluation,
+    get_search_queries,
 )
 from agents.types import (
-    ParaformEvaluationState,
-    ParaformEvaluationInputState,
-    ParaformEvaluationOutputState,
-    Queries,
-    Job,
-    CandidateInfo,
-    SearchState,
+    EvaluationState,
+    EvaluationInputState,
+    EvaluationOutputState,
+    SearchQuery
 )
-from services.firestore import get_most_similar_jobs
 from services.tavily import tavily_search_async
-from services.azure_openai import llm
 
 
-def generate_queries(state: ParaformEvaluationState):
-    candidate = CandidateInfo(
-        full_name=state["candidate_full_name"],
-        context=state["candidate_context"],
-        summary="",
+def generate_queries(state: EvaluationState):
+    job_description = state["job_description"]
+    candidate_context = state["candidate_context"]
+    number_of_queries = state["number_of_queries"]
+    candidate_full_name = state["candidate_full_name"]
+
+    content = get_search_queries(candidate_full_name, candidate_context, job_description, number_of_queries)
+
+    # Add a query for the candidate's name
+    content.queries.append(SearchQuery(search_query=candidate_full_name))
+    return {"search_queries": content.queries}
+
+
+async def gather_sources(state: EvaluationState):
+    search_docs = await tavily_search_async(state["search_queries"])
+    sources_dict = deduplicate_and_format_sources(search_docs)
+    return {"sources_dict": sources_dict}
+
+
+def validate_and_distill_source(state: EvaluationState):
+    source = state["sources_dict"][state["source"]]
+    candidate_full_name = state["candidate_full_name"]
+    candidate_context = state["candidate_context"]
+    confidence_threshold = state["confidence_threshold"]
+
+    initial_content = source.get("content", "") + " " + source.get("title", "")
+    if not heuristic_validator(initial_content, source["title"], candidate_full_name):
+        return {"validated_sources": []}
+
+    llm_output = llm_validator(
+        source["raw_content"], candidate_full_name, candidate_context
     )
+    if llm_output.confidence < confidence_threshold:
+        return {"validated_sources": []}
 
-    structured_llm = llm.with_structured_output(Queries)
-    system_instructions_query = report_planner_query_writer_instructions.format(
-        candidate_full_name=candidate.full_name,
-        candidate_context=candidate.context,
-        number_of_queries=5,
-    )
-    results = structured_llm.invoke(
-        [SystemMessage(content=system_instructions_query)]
-        + [HumanMessage(content="Generate search queries.")]
-    )
-
-    search_state = SearchState(
-        search_queries=results.queries, citations_str="", source_str="", citations=[]
-    )
-
-    return {"candidate": candidate, "search": search_state}
+    source["weight"] = llm_output.confidence
+    source["distilled_content"] = distill_source(
+        source["raw_content"], candidate_full_name
+    ).distilled_source
+    return {"validated_sources": [source]}
 
 
-async def gather_sources(state: ParaformEvaluationState):
-    search_docs = await tavily_search_async(state["search"].search_queries)
-    source_str, citations = await deduplicate_and_format_sources(
-        search_docs,
-        candidate_full_name=state["candidate"].full_name,
-        candidate_context=state["candidate"].context,
-    )
+def compile_sources(state: EvaluationState):
+    validated_sources = state["validated_sources"]
+    ranked_sources = sorted(validated_sources, key=lambda x: x["weight"], reverse=True)
 
-    state["search"].source_str = source_str
-    state["search"].citations_str = "\n".join(
-        [
-            f"[{c['index']}]: {c['url']} (Confidence: {c['confidence']})"
-            for c in citations
-        ]
-    )
-    state["search"].citations = citations
+    formatted_text = "Sources:\n\n"
+    citation_list = []
 
-    return {"search": state["search"]}
-
-
-def write_candidate_summary(state: ParaformEvaluationState):
-    summary_writer_instructions = """
-You are an expert at evaluating candidates for jobs.
-Write a concise summary of the candidate based on the provided sources.
-Focus on their technical skills, experience, and achievements.
-Keep it under 200 words and focus on factual information.
-
-Here is the candidate's name:
-{candidate_full_name}
-
-Here is the candidate's basic profile:
-{candidate_context}
-
-Here are the sources about the candidate, ranked by confidence:
-{source_str}
-
-Use the confidence scores to prioritize the information from the sources.
-    """
-    content = llm.invoke(
-        [
-            SystemMessage(
-                content=summary_writer_instructions.format(
-                    candidate_full_name=state["candidate"].full_name,
-                    candidate_context=state["candidate"].context,
-                    source_str=state["search"].source_str,
-                )
-            )
-        ]
-        + [
-            HumanMessage(
-                content="Write a summary of the candidate based on the provided information. This will be used to find the most relevant roles for the candidate."
-            )
-        ]
-    )
-
-    state["candidate"].summary = content.content
-
-    return {"candidate": state["candidate"]}
-
-
-def get_relevant_jobs(state: ParaformEvaluationState):
-    """Gets top similar jobs and extracts relevant fields"""
-    jobs = get_most_similar_jobs(state["candidate"].summary, state["number_of_roles"])
-
-    # Define default values for each field type
-    list_fields = {
-        "avoid_traits",
-        "benefits",
-        "company_locations",
-        "requirements",
-        "responsibilities",
-        "role_locations",
-        "tech_stack",
-    }
-
-    fields = [
-        "avoid_traits",
-        "benefits",
-        "company_about",
-        "company_description",
-        "company_locations",
-        "company_name",
-        "equity",
-        "experience_info",
-        "ideal_candidate",
-        "name",
-        "paraform_link",
-        "recruiting_advice",
-        "requirements",
-        "responsibilities",
-        "role_description",
-        "role_locations",
-        "salary_lower_bound",
-        "salary_upper_bound",
-        "tech_stack",
-        "visa_text",
-        "visa_text_more",
-        "workplace",
-        "years_experience_max",
-        "years_experience_min",
-    ]
-
-    return {
-        "relevant_jobs": [
-            Job(
-                **{
-                    field: job.get(field, [] if field in list_fields else "")
-                    or ([] if field in list_fields else "")
-                    for field in fields
-                }
-            )
-            for job in jobs
-        ]
-    }
-
-
-def initiate_job_evaluations(state: ParaformEvaluationState):
-    """Initiates parallel evaluation for each job"""
-    return [
-        Send(
-            f"evaluate_job_{i}",
-            {
-                "job_index": i,
-                "current_job": job,
-                **state,
-            },
+    for i, source in enumerate(ranked_sources, 1):
+        formatted_text += (
+            f"[{i}]: {source['title']}:\n"
+            f"URL: {source['url']}\n"
+            f"Relevant content from source: {source['distilled_content']} "
+            f"(Confidence: {source['weight']})\n===\n"
         )
-        for i, job in enumerate(state["relevant_jobs"])
+
+        citation_list.append(
+            {"index": i, "url": source["url"], "confidence": source["weight"], "distilled_content": source["distilled_content"]}
+        )
+
+    return {"source_str": formatted_text.strip(), "citations": citation_list}
+
+
+def initiate_source_validation(state: EvaluationState):
+    return [
+        Send("validate_and_distill_source", {"source": source, **state})
+        for source in state["sources_dict"].keys()
     ]
 
 
-def compile_final_evaluation(state: ParaformEvaluationState):
-    """Compiles all job evaluations into final report"""
-    state["evaluations"].sort(key=lambda x: x.recommendation.score, reverse=True)
+def evaluate_trait(state: EvaluationState):
+    section = state["section"]
+    source_str = state["source_str"]
+    candidate_full_name = state["candidate_full_name"]
+    candidate_context = state["candidate_context"]
+
+    content = get_trait_evaluation(section, candidate_full_name, candidate_context, source_str)
+    
     return {
-        "candidate_summary": state["candidate"].summary,
-        "citations": state["search"].citations_str,
-        "citations_detail": state["search"].citations,
+        "completed_sections": [
+            {"section": section, "content": content.evaluation, "score": content.score}
+        ]
     }
+
+
+def write_recommendation(state: EvaluationState):
+    candidate_full_name = state["candidate_full_name"]
+    completed_sections = state["completed_sections"]
+    job_description = state["job_description"]
+    completed_sections_str = "\n\n".join([s["content"] for s in completed_sections])
+    overall_score = sum([s["score"] for s in completed_sections]) / len(
+        completed_sections
+    )
+    
+    content = get_recommendation(job_description, candidate_full_name, completed_sections_str).recommendation
+
+    return {
+        "completed_sections": [
+            {
+                "section": "Recommendation",
+                "content": content,
+                "score": overall_score,
+            }
+        ]
+    }
+
+
+def compile_evaluation(state: EvaluationState):
+    key_traits = ["Recommendation"] + state["key_traits"]
+    completed_sections = state["completed_sections"]
+    citations = state["citations"]
+    ordered_sections = []
+    for trait in key_traits:
+        for section in completed_sections:
+            if section["section"] == trait:
+                ordered_sections.append(section)
+
+    return {"sections": ordered_sections, "citations": citations}
+
+
+def initiate_evaluation(state: EvaluationState):
+    return [
+        Send("evaluate_trait", {"section": t, **state}) for t in state["key_traits"]
+    ]
 
 
 async def run_search(
+    job_description: str,
     candidate_context: str,
     candidate_full_name: str,
-    number_of_roles: int,
-):
+    key_traits: list[str],
+    number_of_queries: int,
+    confidence_threshold: float,
+) -> EvaluationOutputState:
     builder = StateGraph(
-        ParaformEvaluationState,
-        input=ParaformEvaluationInputState,
-        output=ParaformEvaluationOutputState,
+        EvaluationState, input=EvaluationInputState, output=EvaluationOutputState
     )
-
-    # Main nodes
     builder.add_node("generate_queries", generate_queries)
     builder.add_node("gather_sources", gather_sources)
-    builder.add_node("write_candidate_summary", write_candidate_summary)
-    builder.add_node("get_relevant_jobs", get_relevant_jobs)
-    builder.add_node("compile_final_evaluation", compile_final_evaluation)
+    builder.add_node("validate_and_distill_source", validate_and_distill_source)
+    builder.add_node("compile_sources", compile_sources)
+    builder.add_node("evaluate_trait", evaluate_trait)
+    builder.add_node("write_recommendation", write_recommendation)
+    builder.add_node("compile_evaluation", compile_evaluation)
 
-    # Main edges
     builder.add_edge(START, "generate_queries")
     builder.add_edge("generate_queries", "gather_sources")
-    builder.add_edge("gather_sources", "write_candidate_summary")
-    builder.add_edge("write_candidate_summary", "get_relevant_jobs")
-
-    # Creates subgraphs for each job
-    for i in range(number_of_roles):
-        builder.add_node(f"evaluate_job_{i}", create_job_evaluation_subgraph(i))
-
     builder.add_conditional_edges(
-        "get_relevant_jobs",
-        initiate_job_evaluations,
-        [f"evaluate_job_{i}" for i in range(number_of_roles)],
+        "gather_sources", initiate_source_validation, ["validate_and_distill_source"]
     )
-
-    # Reduces the subgraphs into a single evaluation
-    for i in range(number_of_roles):
-        builder.add_edge(f"evaluate_job_{i}", "compile_final_evaluation")
-
-    builder.add_edge("compile_final_evaluation", END)
+    builder.add_edge("validate_and_distill_source", "compile_sources")
+    builder.add_conditional_edges(
+        "compile_sources", initiate_evaluation, ["evaluate_trait"]
+    )
+    builder.add_edge("evaluate_trait", "write_recommendation")
+    builder.add_edge("write_recommendation", "compile_evaluation")
+    builder.add_edge("compile_evaluation", END)
 
     graph = builder.compile()
 
     return await graph.ainvoke(
-        ParaformEvaluationInputState(
-            candidate_full_name=candidate_full_name,
+        EvaluationInputState(
+            job_description=job_description,
             candidate_context=candidate_context,
-            number_of_roles=number_of_roles,
+            candidate_full_name=candidate_full_name,
+            key_traits=key_traits,
+            number_of_queries=number_of_queries,
+            confidence_threshold=confidence_threshold,
         )
     )

@@ -15,6 +15,16 @@ class Candidate(BaseModel):
     name: str = None
     context: str = None
     url: str = None
+    number_of_queries: int = 5
+    confidence_threshold: float = 0.5
+
+
+class HeadlessEvaluatePayload(Candidate):
+    job_description: str = None
+
+
+class HeadlessEvaluatePayload(Candidate):
+    job_description: str
 
 
 class ParaformEvaluateGraphPayload(BaseModel):
@@ -26,7 +36,3 @@ class ParaformEvaluateGraphPayload(BaseModel):
 class ParaformEvaluateGraphLinkedinPayload(BaseModel):
     linkedin_url: str
     number_of_queries: int
-
-
-class EvaluateGraphPayload(Candidate):
-    job_description: str

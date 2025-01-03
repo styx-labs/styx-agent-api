@@ -3,7 +3,7 @@ import json
 
 def test_evaluate_no_paraform():
     # API endpoint
-    url = "http://localhost:8000/evaluate-no-paraform"
+    url = "http://localhost:8000/evaluate-headless"
 
     # Test payload
     payload = {
@@ -96,7 +96,8 @@ To all current Molina employees: If you are interested in applying for this posi
 
 Molina Healthcare offers a competitive benefits and compensation package. Molina Healthcare is an Equal Opportunity Employer (EOE) M/F/D/V.
         """,
-        "url": "https://www.linkedin.com/in/ellina-oganyan-68857113a/"
+        "url": "https://www.linkedin.com/in/ellina-oganyan-68857113a/",
+        "confidence_threshold": 0.8,
     }
 
     # Make the POST request
