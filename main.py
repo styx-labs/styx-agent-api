@@ -103,7 +103,6 @@ async def create_candidate(job_id: str, candidate: Candidate):
         candidate_data["context"],
         candidate_data["name"],
         job_data["key_traits"],
-        5,
     )
     candidate_data["sections"] = graph_result["sections"]
     candidate_data["citations"] = graph_result["citations"]

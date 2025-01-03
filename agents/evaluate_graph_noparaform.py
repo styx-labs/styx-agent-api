@@ -215,7 +215,6 @@ def compile_evaluation(state: EvaluationState):
             if section["section"] == trait:
                 ordered_sections.append(section)
 
-    print(type(citations))
     return {"sections": ordered_sections, "citations": citations}
 
 
@@ -229,15 +228,17 @@ async def run_search_no_paraform(
     job_description: str,
     candidate_context: str,
     candidate_full_name: str,
+    key_traits: list[str] = None,
 ) -> EvaluationOutputState:
     NUMBER_OF_QUERIES = 5
 
-    key_traits = get_key_traits(job_description)["key_traits"] or [
-        "Technical Skills",
-        "Experience",
-        "Education",
-        "Entrepreneurship",
-    ]
+    if not key_traits:
+        key_traits = get_key_traits(job_description)["key_traits"] or [
+            "Technical Skills",
+            "Experience",
+            "Education",
+            "Entrepreneurship",
+        ]
 
     builder = StateGraph(
         EvaluationState, input=EvaluationInputState, output=EvaluationOutputState
