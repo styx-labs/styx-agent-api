@@ -5,7 +5,7 @@ from langsmith import traceable
 tavily_async_client = AsyncTavilyClient()
 
 
-@traceable
+@traceable(name="tavily_search_async")
 async def tavily_search_async(search_queries):
     """Performs concurrent web searches using the Tavily API."""
     search_tasks = []

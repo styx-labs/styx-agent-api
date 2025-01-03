@@ -90,7 +90,7 @@ def compile_sources(state: EvaluationState):
         )
 
         citation_list.append(
-            {"index": i, "url": source["url"], "confidence": source["weight"]}
+            {"index": i, "url": source["url"], "confidence": source["weight"], "distilled_content": source["distilled_content"]}
         )
 
     return {"source_str": formatted_text.strip(), "citations": citation_list}
@@ -117,7 +117,12 @@ def evaluate_trait(state: EvaluationState):
 
     Output two values:
     - An integer score from 0 to 10 that rates the candidate based on their experience in this trait.
-    - A string of text that is the evaluation of the candidate in this specific trait based on the provided information. This should be a single sentence that is less than 50 words.
+    - A string of text that is the evaluation of the candidate in this specific trait based on the provided information. This should be a no more than 100 words.
+
+    In the string of text, when you mention information that you get from a source, please include a citation in your evaluation by citing the number of the source that links to the url in a clickable markdown format.
+    For example, if you use information from sources 3 and 7, cite them like this: [3](url), [7](url). 
+    Don't include a citation if you are not referencing a source.
+    Cite sources liberally.
 
     Here is the trait you are evaluating the candidate on:
     {section}
@@ -127,10 +132,6 @@ def evaluate_trait(state: EvaluationState):
     {candidate_context}
     Here are the sources about the candidate:
     {source_str}
-
-    When you mention information that you get from a source, please include a citation in your evaluation by citing the number of the source that links to the url in a clickable markdown format.
-    For example, if you use information from sources 3 and 7, cite them like this: [3](url), [7](url). 
-    Don't include a citation if you are not referencing a source.
     """
 
     structured_llm = llm.with_structured_output(EvaluationOutput)
@@ -220,6 +221,8 @@ def compile_evaluation(state: EvaluationState):
         for section in completed_sections:
             if section["section"] == trait:
                 ordered_sections.append(section)
+
+    print(type(citations))
     return {"sections": ordered_sections, "citations": citations}
 
 
