@@ -3,7 +3,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 key_traits_prompt = """
     You will be given a job description.
-    Please return an array of 5-8 traits/categories that candidates should be evaluated on. 
+    Please return an array of 3-5 traits/categories that candidates should be evaluated on. 
     Categories should not be full sentences, but rather short phrases that are specific and concise.
     Categories should not be redundant.
     Your answer should be in JSON format with no other text, and the array should be named "key_traits".
