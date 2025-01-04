@@ -22,16 +22,29 @@ search_query_prompt = """
     The job they're being considered for is:
     {job_description}
     Generate {number_of_queries} search queries that will help gather comprehensive information about this candidate. 
-    Guidelines for creating effective person-focused queries:
-    1. Create simple, direct queries using key identifying information
-    2. Avoid complex queries with multiple keywords or technical terms
-    3. Focus on finding the candidate's digital presence
-    4. Include queries that might surface profiles, articles, or mentions from:
-    - Professional organizations and news
-    - University publications
-    - Personal blogs
-    - GitHug repositories
-    Make each query specific and focused on one aspect of the candidate's background.
+    
+    IMPORTANT: Each query should:
+    - Be 2-5 words maximum
+    - Include the person's full name
+    - Focus on ONE specific aspect (hometown, school, company, etc.)
+    - Be something you would actually type into Google
+
+    Example good queries for "John Smith":
+    - "John Smith Microsoft"
+    - "John Smith Hinsdale Illinois"
+    - "John Smith Stanford"
+    - "John Smith GitHub"
+
+    Example bad queries (too complex):
+    - "John Smith software engineer Microsoft technical projects"
+    - "John Smith professional background experience skills"
+    - "John Smith publications and conference presentations"
+
+    Focus on queries that might find:
+    - Professional profiles (Portfolios, GitHub, Google Scholar, etc - whatever is relevant to the job)
+    - Company mentions
+    - University connections
+    - Projects, publications, etc.
 """
 
 
