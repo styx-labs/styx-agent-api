@@ -23,10 +23,6 @@ class HeadlessEvaluatePayload(Candidate):
     job_description: str = None
 
 
-class HeadlessEvaluatePayload(Candidate):
-    job_description: str
-
-
 class HeadlessReachoutPayload(BaseModel):
     name: str
     job_description: str
