@@ -27,6 +27,13 @@ class HeadlessEvaluatePayload(Candidate):
     job_description: str
 
 
+class HeadlessReachoutPayload(BaseModel):
+    name: str
+    job_description: str
+    sections: list[dict]
+    citations: list[dict]
+
+
 class ParaformEvaluateGraphPayload(BaseModel):
     candidate_context: str
     candidate_full_name: str

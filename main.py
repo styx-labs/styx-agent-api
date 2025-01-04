@@ -6,11 +6,12 @@ from models import (
     JobDescription,
     Candidate,
     HeadlessEvaluatePayload,
+    HeadlessReachoutPayload,
 )
 from dotenv import load_dotenv
 from services.proxycurl import get_linkedin_context
 from agents.evaluate_graph import run_search
-from agents.search_helper import get_key_traits
+from services.helper_functions import get_key_traits, get_reachout_message
 
 
 load_dotenv()
@@ -71,6 +72,22 @@ async def evaluate_headless(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing evaluation: {str(e)}"
+        )
+    
+
+@app.post("/generate-reachout-headless")
+async def generate_reachout_headless(payload: HeadlessReachoutPayload):
+    try:
+        return get_reachout_message(
+            name=payload.name,
+            job_description=payload.job_description,
+            sections=payload.sections,
+            citations=payload.citations
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating reachout message: {str(e)}"
         )
 
 
