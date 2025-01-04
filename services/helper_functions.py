@@ -16,7 +16,8 @@ from agents.prompts import (
     distill_source_prompt,
     recommendation_prompt,
     trait_evaluation_prompt,
-    search_query_prompt
+    search_query_prompt,
+    reachout_message_prompt
 )
 
 
@@ -219,3 +220,32 @@ def get_trait_evaluation(
         ]
     )
     return output
+
+
+@traceable(name="get_reachout_message")
+def get_reachout_message(
+    name: str,
+    job_description: str,
+    sections: list[dict],
+    citations: list[dict]
+) -> str:
+    sections_str = "\n".join([f"{section['section']}: {section['content']} " for section in sections])
+    citations_str = "\n".join([f"{citation['distilled_content']}" for citation in citations])
+    output = llm.invoke(
+        [
+            SystemMessage(
+                content=reachout_message_prompt.format(
+                    name=name, 
+                    job_description=job_description, 
+                    sections=sections_str,
+                    citations=citations_str
+                )
+            )
+        ]
+        + [
+            HumanMessage(
+                content="Write a LinkedIn message to the candidate that is tailored to their profile and the information provided."
+            )
+        ]
+    )
+    return output.content
