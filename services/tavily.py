@@ -11,5 +11,11 @@ async def tavily_search_async(search_queries):
     search_tasks = []
     for query in search_queries:
         query_str = query.search_query
-        search_tasks.append(tavily_async_client.search(query_str, max_results=10, include_raw_content=True))
+        # Wrap individual search in a traceable function
+        search_tasks.append(_single_tavily_search(query_str))
     return await asyncio.gather(*search_tasks)
+
+@traceable(name="single_tavily_search")
+async def _single_tavily_search(query_str):
+    """Performs a single web search using the Tavily API."""
+    return await tavily_async_client.search(query_str, max_results=5, include_raw_content=True)

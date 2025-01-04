@@ -5,7 +5,6 @@ from services.helper_functions import (
     heuristic_validator,
     llm_validator,
     distill_source,
-    get_key_traits,
     get_recommendation,
     get_trait_evaluation,
     get_search_queries,
@@ -44,8 +43,7 @@ def validate_and_distill_source(state: EvaluationState):
     candidate_context = state["candidate_context"]
     confidence_threshold = state["confidence_threshold"]
 
-    initial_content = source.get("content", "") + " " + source.get("title", "")
-    if not heuristic_validator(initial_content, source["title"], candidate_full_name):
+    if not heuristic_validator(source["raw_content"] if source["raw_content"] else "", source["title"], candidate_full_name):
         return {"validated_sources": []}
 
     llm_output = llm_validator(

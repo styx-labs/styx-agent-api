@@ -2,6 +2,9 @@ import re
 from langchain_core.messages import HumanMessage, SystemMessage
 from services.azure_openai import llm
 from langsmith import traceable
+import httpx
+import asyncio
+from bs4 import BeautifulSoup
 from agents.types import (
     KeyTraitsOutput,
     QueriesOutput,
