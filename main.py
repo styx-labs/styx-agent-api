@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 import services.firestore as firestore
 from models import (
@@ -30,85 +30,186 @@ app.add_middleware(
 async def evaluate_headless(
     payload: HeadlessEvaluatePayload,
 ):
-    candidate_data = payload.model_dump()
-    if candidate_data.get("url"):
-        name, context = get_linkedin_context(candidate_data["url"])
-        candidate_data["name"] = name
-        candidate_data["context"] = context
+    try:
+        candidate_data = payload.model_dump()
+        if candidate_data.get("url"):
+            try:
+                name, context = get_linkedin_context(candidate_data["url"])
+                candidate_data["name"] = name
+                candidate_data["context"] = context
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Failed to fetch LinkedIn profile: {str(e)}"
+                )
 
-    if not candidate_data["job_description"]:
-        candidate_data["key_traits"] = [
-            "Technical Skills",
-            "Experience",
-            "Education",
-            "Entrepreneurship",
-        ]
-    else:
-        candidate_data["key_traits"] = get_key_traits(candidate_data["job_description"]).key_traits
+        if not candidate_data["job_description"]:
+            candidate_data["key_traits"] = [
+                "Technical Skills",
+                "Experience",
+                "Education",
+                "Entrepreneurship",
+            ]
+        else:
+            try:
+                candidate_data["key_traits"] = get_key_traits(candidate_data["job_description"]).key_traits
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Error generating key traits: {str(e)}"
+                )
 
-    return await run_search(
-        job_description=candidate_data["job_description"],
-        candidate_context=candidate_data["context"],
-        candidate_full_name=candidate_data["name"],
-        key_traits=candidate_data["key_traits"],
-        number_of_queries=candidate_data["number_of_queries"],
-        confidence_threshold=candidate_data["confidence_threshold"],
-    )
+        return await run_search(
+            job_description=candidate_data["job_description"],
+            candidate_context=candidate_data["context"],
+            candidate_full_name=candidate_data["name"],
+            key_traits=candidate_data["key_traits"],
+            number_of_queries=candidate_data["number_of_queries"],
+            confidence_threshold=candidate_data["confidence_threshold"],
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing evaluation: {str(e)}"
+        )
 
 
 @app.post("/get-key-traits")
 def get_key_traits_request(job_description: JobDescription) -> dict:
-    return get_key_traits(job_description.description)
+    try:
+        return get_key_traits(job_description.description)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating key traits: {str(e)}"
+        )
 
 
 @app.post("/jobs")
 def create_job(job: Job):
-    job_data = job.model_dump()
-    job_id = firestore.create_job(job_data)
-    return {"job_id": job_id}
+    try:
+        job_data = job.model_dump()
+        job_id = firestore.create_job(job_data)
+        return {"job_id": job_id}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create job: {str(e)}"
+        )
 
 
 @app.get("/jobs")
 def get_jobs():
-    jobs = firestore.get_jobs()
-    return {"jobs": jobs}
+    try:
+        jobs = firestore.get_jobs()
+        return {"jobs": jobs}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving jobs: {str(e)}"
+        )
 
 
 @app.delete("/jobs/{job_id}")
 def delete_job(job_id: str):
-    success = firestore.delete_job(job_id)
-    return {"success": success}
+    try:
+        success = firestore.delete_job(job_id)
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Failed to delete job: {str(e)}"
+        )
 
 
 @app.post("/jobs/{job_id}/candidates")
 async def create_candidate(job_id: str, candidate: Candidate):
-    candidate_data = candidate.model_dump()
-    if "url" in candidate_data:
-        name, context = get_linkedin_context(candidate_data["url"])
-        candidate_data["name"] = name
-        candidate_data["context"] = context
-    job_data = firestore.get_job(job_id)
-    graph_result = await run_search(
-        job_data["job_description"],
-        candidate_data["context"],
-        candidate_data["name"],
-        job_data["key_traits"],
-        candidate_data["number_of_queries"],
-        candidate_data["confidence_threshold"],
-    )
-    candidate_data["sections"] = graph_result["sections"]
-    candidate_data["citations"] = graph_result["citations"]
-    candidate_id = firestore.create_candidate(job_id, candidate_data)
-    return {"candidate_id": candidate_id}
+    try:
+        candidate_data = candidate.model_dump()
+        if "url" in candidate_data:
+            try:
+                name, context = get_linkedin_context(candidate_data["url"])
+                candidate_data["name"] = name
+                candidate_data["context"] = context
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Failed to fetch LinkedIn profile: {str(e)}"
+                )
+        
+        job_data = firestore.get_job(job_id)
+        if not job_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job with id {job_id} not found"
+            )
+
+        try:
+            graph_result = await run_search(
+                job_data["job_description"],
+                candidate_data["context"],
+                candidate_data["name"],
+                job_data["key_traits"],
+                candidate_data["number_of_queries"],
+                candidate_data["confidence_threshold"],
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error running candidate evaluation: {str(e)}"
+            )
+
+        candidate_data["sections"] = graph_result["sections"]
+        candidate_data["citations"] = graph_result["citations"]
+        
+        candidate_id = firestore.create_candidate(job_id, candidate_data)
+        return {"candidate_id": candidate_id}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating candidate: {str(e)}"
+        )
 
 
 @app.get("/jobs/{job_id}/candidates")
 def get_candidates(job_id: str):
-    candidates = firestore.get_candidates(job_id)
-    return {"candidates": candidates}
+    try:
+        candidates = firestore.get_candidates(job_id)
+        return {"candidates": candidates}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving candidates: {str(e)}"
+        )
 
 
 @app.delete("/jobs/{job_id}/candidates/{candidate_id}")
 def delete_candidate(job_id: str, candidate_id: str):
-    success = firestore.delete_candidate(job_id, candidate_id)
-    return {"success": success}
+    try:
+        success = firestore.delete_candidate(job_id, candidate_id)
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete candidate: {str(e)}"
+        )
+
+
+@app.get("/jobs/{job_id}")
+def get_job(job_id: str):
+    try:
+        job = firestore.get_job(job_id)
+        if not job:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job with id {job_id} not found"
+            )
+        return job
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving job: {str(e)}"
+        )
