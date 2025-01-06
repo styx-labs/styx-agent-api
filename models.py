@@ -5,6 +5,8 @@ from typing import List
 class Job(BaseModel):
     job_description: str
     key_traits: List[str]
+    job_title: str
+    company_name: str
 
 
 class JobDescription(BaseModel):

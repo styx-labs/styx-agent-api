@@ -5,7 +5,11 @@ This file contains all the prompts.
 
 key_traits_prompt = """
     You will be given a job description.
-    Please return an array of 3-5 traits/categories that candidates should be evaluated on. 
+    Please return 3 things:
+    1) An array of 3-5 traits/categories that candidates should be evaluated on. 
+    2) The job title
+    3) The company name
+    
     Categories should not be full sentences, but rather short phrases that are specific and concise.
     Categories should not be redundant.
 

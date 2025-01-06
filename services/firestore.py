@@ -23,6 +23,11 @@ def create_job(job_data):
     return doc_ref.id
 
 def delete_job(job_id):
+    candidates_ref = db.collection("jobs").document(job_id).collection("candidates")
+    candidates = candidates_ref.stream()
+    for candidate in candidates:
+        candidate.reference.delete()
+    
     db.collection("jobs").document(job_id).delete()
     return True
 

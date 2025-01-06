@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 # All LLM output types
 class KeyTraitsOutput(BaseModel):
     key_traits: list[str]
+    job_title: str
+    company_name: str
 
 
 class SearchQuery(BaseModel):
