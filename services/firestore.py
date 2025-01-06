@@ -38,10 +38,14 @@ def get_job(job_id):
 
 def create_candidate(job_id, candidate_data):
     ref = db.collection("jobs").document(job_id).collection("candidates")
-    doc_ref = ref.document()
-    candidate_data["id"] = doc_ref.id
+    if "url" in candidate_data:
+        doc_ref = ref.document(candidate_data["public_identifier"])
+        candidate_data["id"] = candidate_data["public_identifier"]
+    else:
+        doc_ref = ref.document()
+        candidate_data["id"] = doc_ref.id
     doc_ref.set(candidate_data)
-    return doc_ref.id
+    return candidate_data["id"]
 
 def get_candidates(job_id):
     ref = db.collection("jobs").document(job_id).collection("candidates")

@@ -34,4 +34,4 @@ def get_linkedin_context(url):
         for e in response["education"]:
             if "school" in e and "degree_name" in e and "field_of_study" in e:
                 context += f"Education: {e['school']}; {e['degree_name']} in {e['field_of_study']}\n"
-    return name, context
+    return name, context, response["public_identifier"]

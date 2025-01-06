@@ -16,6 +16,7 @@ from agents.types import (
     SearchQuery
 )
 from services.tavily import tavily_search_async
+from services.exa import exa_search_async
 
 
 def generate_queries(state: EvaluationState):

@@ -27,11 +27,6 @@ async def _single_exa_search(query):
                 "maxCharacters": 400000,
                 "includeHtmlTags": False
             },
-            "highlights": {
-                "numSentences": 1,
-                "highlightsPerUrl": 1,
-                "query": "Key advancements"
-            },
             "livecrawl": "never",
         }
     }
