@@ -67,8 +67,13 @@ def create_candidate(job_id: str, candidate_data: dict, user_id: str) -> str:
         .collection("jobs")
         .document(job_id)
         .collection("candidates")
-        .document()
     )
+    if "public_identifier" in candidate_data:
+        doc_ref = doc_ref.document(candidate_data["public_identifier"])
+        candidate_data["id"] = candidate_data["public_identifier"]
+    else:
+        doc_ref = doc_ref.document()
+        candidate_data["id"] = doc_ref.id
     doc_ref.set(candidate_data)
     return doc_ref.id
 
