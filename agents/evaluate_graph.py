@@ -116,18 +116,13 @@ def write_recommendation(state: EvaluationState):
     content = get_recommendation(job_description, candidate_full_name, completed_sections_str).recommendation
 
     return {
-        "completed_sections": [
-            {
-                "section": "Recommendation",
-                "content": content,
-                "score": overall_score,
-            }
-        ]
+        "summary": content,
+        "overall_score": overall_score
     }
 
 
 def compile_evaluation(state: EvaluationState):
-    key_traits = ["Recommendation"] + state["key_traits"]
+    key_traits = state["key_traits"]
     completed_sections = state["completed_sections"]
     citations = state["citations"]
     ordered_sections = []

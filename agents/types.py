@@ -54,7 +54,8 @@ class EvaluationState(TypedDict):
     completed_sections: Annotated[list, operator.add]   # This is for parallelizing section writing
     validated_sources: Annotated[list, operator.add]   # This is for parallelizing source validation
     recommendation: str
-    final_evaluation: str
+    summary: str
+    overall_score: float
     section: str   # This is for parallelizing section writing
     source: str   # This is for parallelizing source validation
     sources_dict: dict
@@ -74,3 +75,5 @@ class EvaluationInputState(TypedDict):
 class EvaluationOutputState(TypedDict):
     citations: list[dict]
     sections: list[dict]
+    summary: str
+    overall_score: float

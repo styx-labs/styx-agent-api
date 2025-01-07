@@ -158,6 +158,8 @@ async def temp_create_candidate(job_id: str, candidate_data: dict, job_data: dic
     candidate_data["sections"] = graph_result["sections"]
     candidate_data["citations"] = graph_result["citations"]
     candidate_data["status"] = "complete"
+    candidate_data["summary"] = graph_result["summary"]
+    candidate_data["overall_score"] = graph_result["overall_score"]
     firestore.create_candidate(job_id, candidate_data)
 
 
