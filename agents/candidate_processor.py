@@ -21,6 +21,9 @@ class CandidateProcessor:
     async def process_single_candidate(self, candidate_data: dict) -> None:
         """Process a single candidate with evaluation"""
         try:
+            # Create the candidate in Firebase first with processing status
+            firestore.create_candidate(self.job_id, candidate_data, self.user_id)
+
             graph_result = await run_search(
                 self.job_data["job_description"],
                 candidate_data["context"],
@@ -30,6 +33,7 @@ class CandidateProcessor:
                 candidate_data["confidence_threshold"],
             )
 
+            # Update the candidate with evaluation results
             candidate_data.update(
                 {
                     "sections": graph_result["sections"],
@@ -40,6 +44,7 @@ class CandidateProcessor:
                 }
             )
 
+            # Update the candidate in Firebase with complete status and results
             firestore.create_candidate(self.job_id, candidate_data, self.user_id)
         except Exception as e:
             if candidate_data.get("public_identifier"):
