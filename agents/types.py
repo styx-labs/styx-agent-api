@@ -6,11 +6,12 @@ from typing import List, Annotated
 from typing_extensions import TypedDict
 import operator
 from pydantic import BaseModel, Field
+from models import KeyTrait
 
 
 # All LLM output types
 class KeyTraitsOutput(BaseModel):
-    key_traits: list[str]
+    key_traits: list[KeyTrait]
     job_title: str
     company_name: str
 
@@ -57,6 +58,7 @@ class EvaluationState(TypedDict):
     summary: str
     overall_score: float
     section: str   # This is for parallelizing section writing
+    section_description: str   # This is for parallelizing section writing
     source: str   # This is for parallelizing source validation
     sources_dict: dict
     citations: list[dict]
@@ -67,7 +69,7 @@ class EvaluationInputState(TypedDict):
     job_description: str
     candidate_context: str
     candidate_full_name: str
-    key_traits: list[str]
+    key_traits: list[KeyTrait]
     number_of_queries: int
     confidence_threshold: float
 

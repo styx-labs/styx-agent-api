@@ -200,6 +200,7 @@ def get_recommendation(
 @traceable(name="get_trait_evaluation")
 def get_trait_evaluation(
     section: str, 
+    trait_description: str, 
     candidate_full_name: str, 
     candidate_context: str, 
     source_str: str
@@ -210,6 +211,7 @@ def get_trait_evaluation(
             SystemMessage(
                 content=trait_evaluation_prompt.format(
                     section=section,
+                    trait_description=trait_description,
                     candidate_full_name=candidate_full_name,
                     candidate_context=candidate_context,
                     source_str=source_str,
