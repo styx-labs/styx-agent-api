@@ -12,6 +12,7 @@ key_traits_prompt = """
     
     Categories should not be full sentences, but rather short phrases that are specific and concise.
     Categories should not be redundant.
+    If you are unable to find a job title or company name, please return an empty string for those fields.
 
     Here is the job description:
     {job_description}
