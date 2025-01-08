@@ -6,12 +6,13 @@ This file contains all the prompts.
 key_traits_prompt = """
     You will be given a job description.
     Please return 3 things:
-    1) An array of 3-5 traits/categories that candidates should be evaluated on. 
+    1) An array of 3-5 traits that candidates should be evaluated on. Please return the trait and a short description of the trait.
     2) The job title
     3) The company name
     
-    Categories should not be full sentences, but rather short phrases that are specific and concise.
-    Categories should not be redundant.
+    Traits should not be full sentences, but rather short phrases that are specific and concise.
+    Traits should not be redundant.
+    Descriptions should be one sentence, and provide a little more context about the trait.
     If you are unable to find a job title or company name, please return an empty string for those fields.
 
     Here is the job description:
@@ -117,7 +118,7 @@ recommendation_prompt = """
 
 trait_evaluation_prompt = """
     You are an expert at evaluating candidates for a job.
-    You are given a specific trait that you are evaluating the candidate on.
+    You are given a specific trait that you are evaluating the candidate on, as well as a description of the trait, which you should use to judge and evaluate the candidate.
     You are also given a string of sources that contain information about the candidate.
     Write a evaluation of the candidate in this specific trait based on the provided information.
     It is possible that there is no information about the candidate in this trait - if this is the case, please mention that no information was found regarding the trait, not that the candidate does not have the trait.
@@ -133,6 +134,8 @@ trait_evaluation_prompt = """
 
     Here is the trait you are evaluating the candidate on:
     {section}
+    Here is the description of the trait, which you should use to evaluate the candidate:
+    {trait_description}
     Here is the candidate's name:
     {candidate_full_name}
     Here is the candidate's basic profile:

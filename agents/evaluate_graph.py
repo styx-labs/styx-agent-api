@@ -91,11 +91,12 @@ def initiate_source_validation(state: EvaluationState):
 
 def evaluate_trait(state: EvaluationState):
     section = state["section"]
+    section_description = state["section_description"]
     source_str = state["source_str"]
     candidate_full_name = state["candidate_full_name"]
     candidate_context = state["candidate_context"]
 
-    content = get_trait_evaluation(section, candidate_full_name, candidate_context, source_str)
+    content = get_trait_evaluation(section, section_description, candidate_full_name, candidate_context, source_str)
     
     return {
         "completed_sections": [
@@ -128,7 +129,7 @@ def compile_evaluation(state: EvaluationState):
     ordered_sections = []
     for trait in key_traits:
         for section in completed_sections:
-            if section["section"] == trait:
+            if section["section"] == trait["trait"]:
                 ordered_sections.append(section)
 
     return {"sections": ordered_sections, "citations": citations}
@@ -136,7 +137,7 @@ def compile_evaluation(state: EvaluationState):
 
 def initiate_evaluation(state: EvaluationState):
     return [
-        Send("evaluate_trait", {"section": t, **state}) for t in state["key_traits"]
+        Send("evaluate_trait", {"section": t["trait"], "section_description": t["description"], **state}) for t in state["key_traits"]
     ]
 
 
@@ -144,7 +145,7 @@ async def run_search(
     job_description: str,
     candidate_context: str,
     candidate_full_name: str,
-    key_traits: list[str],
+    key_traits: list[dict],
     number_of_queries: int,
     confidence_threshold: float,
 ) -> EvaluationOutputState:

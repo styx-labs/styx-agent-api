@@ -1,9 +1,15 @@
 from pydantic import BaseModel
 from typing import List
 
+
+class KeyTrait(BaseModel):
+    trait: str
+    description: str
+
+
 class Job(BaseModel):
     job_description: str
-    key_traits: List[str]
+    key_traits: List[KeyTrait]
     job_title: str
     company_name: str
 
