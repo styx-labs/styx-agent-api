@@ -46,3 +46,7 @@ class ParaformEvaluateGraphPayload(BaseModel):
 class ParaformEvaluateGraphLinkedinPayload(BaseModel):
     linkedin_url: str
     number_of_queries: int
+
+
+class BulkLinkedInPayload(BaseModel):
+    urls: List[str]
