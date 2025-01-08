@@ -1,4 +1,13 @@
-from fastapi import BackgroundTasks, FastAPI, HTTPException, status, Header, Depends, File, UploadFile
+from fastapi import (
+    BackgroundTasks,
+    FastAPI,
+    HTTPException,
+    status,
+    Header,
+    Depends,
+    File,
+    UploadFile,
+)
 from fastapi.middleware.cors import CORSMiddleware
 import services.firestore as firestore
 from models import (
@@ -7,16 +16,15 @@ from models import (
     Candidate,
     HeadlessEvaluatePayload,
     HeadlessReachoutPayload,
+    BulkLinkedInPayload,
 )
 from dotenv import load_dotenv
 from services.proxycurl import get_linkedin_context
 from agents.evaluate_graph import run_search
 from services.helper_functions import get_key_traits, get_reachout_message
 from services.firebase_auth import verify_firebase_token
-import csv
-import codecs
 import asyncio
-import uuid
+from agents.candidate_processor import CandidateProcessor
 
 
 load_dotenv()
@@ -181,37 +189,10 @@ def delete_job(job_id: str, user_id: str = Depends(validate_user_id)):
         )
 
 
-async def create_candidate_helper(
-    job_id: str, candidate_data: dict, job_data: dict, user_id: str
-):
-    try:
-        graph_result = await run_search(
-            job_data["job_description"],
-            candidate_data["context"],  
-            candidate_data["name"],
-            job_data["key_traits"],
-            candidate_data["number_of_queries"],
-            candidate_data["confidence_threshold"],
-        )
-        candidate_data["sections"] = graph_result["sections"]
-        candidate_data["citations"] = graph_result["citations"]
-        candidate_data["status"] = "complete"
-        candidate_data["summary"] = graph_result["summary"]
-        candidate_data["overall_score"] = graph_result["overall_score"]
-        firestore.create_candidate(job_id, candidate_data, user_id)
-    except Exception as e:
-        firestore.delete_candidate(job_id, candidate_data["public_identifier"], user_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error running candidate evaluation: {str(e)}",
-        )
-
-
 @app.post("/jobs/{job_id}/candidates")
 async def create_candidate(
     job_id: str,
     candidate: Candidate,
-    background_tasks: BackgroundTasks,
     user_id: str = Depends(validate_user_id),
 ):
     try:
@@ -221,28 +202,20 @@ async def create_candidate(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Job with id {job_id} not found",
             )
-        
+
+        processor = CandidateProcessor(job_id, job_data, user_id)
         candidate_data = candidate.model_dump()
+
         if "url" in candidate_data:
-            try:
-                name, context, public_identifier = get_linkedin_context(
-                    candidate_data["url"]
-                )
-                candidate_data["name"] = name
-                candidate_data["context"] = context
-                candidate_data["public_identifier"] = public_identifier
-            except Exception as e:
+            candidate_data = processor.create_candidate_record(candidate_data["url"])
+            if not candidate_data:
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=f"Failed to fetch LinkedIn profile: {str(e)}",
+                    detail="Failed to fetch LinkedIn profile",
                 )
 
-        candidate_data["status"] = "processing"
-        firestore.create_candidate(job_id, candidate_data, user_id)
-
-        background_tasks.add_task(
-            create_candidate_helper, job_id, candidate_data, job_data, user_id
-        )
+        # Start background processing
+        asyncio.create_task(processor.process_single_candidate(candidate_data))
         return {"message": "Candidate processing started"}
 
     except Exception as e:
@@ -250,60 +223,53 @@ async def create_candidate(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating candidate: {str(e)}",
         )
-    
-
-async def create_candidates_batch_helper(
-    job_id: str, 
-    candidates: list, 
-    job_data: dict, 
-    user_id: str
-):
-    tasks = []
-    for candidate in candidates:
-        tasks.append(create_candidate_helper(job_id, candidate, job_data, user_id))
-    await asyncio.gather(*tasks)
 
 
 @app.post("/jobs/{job_id}/candidates_batch")
 async def create_candidates_batch(
-    job_id: str, 
-    background_tasks: BackgroundTasks, 
+    job_id: str,
     file: UploadFile = File(...),
-    user_id: str = Depends(validate_user_id)
+    user_id: str = Depends(validate_user_id),
 ):
     try:
         job_data = firestore.get_job(job_id, user_id)
         if not job_data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Job with id {job_id} not found"
+                detail=f"Job with id {job_id} not found",
             )
-        csvReader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'))
-        candidates = []
-        total_rows = 0
-        for rows in csvReader:
-            total_rows += 1
-            try:
-                candidate = {"url": rows['url'], "status": "processing"}
-                name, context, public_identifier = get_linkedin_context(candidate["url"])
-                candidate["name"] = name
-                candidate["context"] = context
-                candidate["public_identifier"] = public_identifier
-                candidate["number_of_queries"] = 5
-                candidate["confidence_threshold"] = 0.5
-                candidates.append(candidate)
-                firestore.create_candidate(job_id, candidate, user_id)
-            except Exception as e:
-                print(f"Error processing candidate with URL {rows.get('url', 'unknown')}: {str(e)}")
-                continue  # Skip to the next candidate
-        background_tasks.add_task(
-            create_candidates_batch_helper, job_id, candidates, job_data, user_id
-        )
-        return {"message": f"Candidates processing started: successfully created {len(candidates)} candidates out of {total_rows} candidates"}
+
+        processor = CandidateProcessor(job_id, job_data, user_id)
+        return await processor.process_csv(file.file)
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating candidates batch: {str(e)}"
+            detail=f"Error creating candidates batch: {str(e)}",
+        )
+
+
+@app.post("/jobs/{job_id}/candidates_bulk")
+async def create_candidates_bulk(
+    job_id: str,
+    payload: BulkLinkedInPayload,
+    user_id: str = Depends(validate_user_id),
+):
+    try:
+        job_data = firestore.get_job(job_id, user_id)
+        if not job_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job with id {job_id} not found",
+            )
+
+        processor = CandidateProcessor(job_id, job_data, user_id)
+        return await processor.process_urls(payload.urls)
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing bulk LinkedIn URLs: {str(e)}",
         )
 
 
