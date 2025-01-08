@@ -6,7 +6,7 @@ This file contains all the prompts.
 key_traits_prompt = """
     You will be given a job description.
     Please return 3 things:
-    1) An array of 3-5 traits that candidates should be evaluated on. Please return the trait and a description of the trait.
+    1) An array of 5-7 traits that candidates should be evaluated on. Please return the trait and a description of the trait.
     2) The job title
     3) The company name
     
@@ -14,6 +14,7 @@ key_traits_prompt = """
     - Traits should not be full sentences, but rather short phrases that are specific and concise.
     - Traits should not be redundant.
     - Traits should be specific and concrete, not just "Adaptability" or "Communication Skills" but rather "Experience on cross-functional teams" or "Experience with React".
+    - If there are hard traits in the job description such as "PhD or Masters in X" or "Has worked at Y", please include that trait in the list.
     - Descriptions should be around two sentences, and serve as a guide for the evaluator to understand how to evaluate a candidate in this trait.
     - If you are unable to find a job title or company name, please return an empty string for those fields.
 
