@@ -6,14 +6,16 @@ This file contains all the prompts.
 key_traits_prompt = """
     You will be given a job description.
     Please return 3 things:
-    1) An array of 3-5 traits that candidates should be evaluated on. Please return the trait and a short description of the trait.
+    1) An array of 3-5 traits that candidates should be evaluated on. Please return the trait and a description of the trait.
     2) The job title
     3) The company name
     
-    Traits should not be full sentences, but rather short phrases that are specific and concise.
-    Traits should not be redundant.
-    Descriptions should be one sentence, and provide a little more context about the trait.
-    If you are unable to find a job title or company name, please return an empty string for those fields.
+    Guidelines:
+    - Traits should not be full sentences, but rather short phrases that are specific and concise.
+    - Traits should not be redundant.
+    - Traits should be specific and concrete, not just "Adaptability" or "Communication Skills" but rather "Experience on cross-functional teams" or "Experience with React".
+    - Descriptions should be around two sentences, and serve as a guide for the evaluator to understand how to evaluate a candidate in this trait.
+    - If you are unable to find a job title or company name, please return an empty string for those fields.
 
     Here is the job description:
     {job_description}
@@ -127,10 +129,13 @@ trait_evaluation_prompt = """
     - An integer score from 0 to 10 that rates the candidate based on their experience in this trait.
     - A string of text that is the evaluation of the candidate in this specific trait based on the provided information. This should be a no more than 100 words.
 
-    In the string of text, when you mention information that you get from a source, please include a citation in your evaluation by citing the number of the source that links to the url in a clickable markdown format.
-    For example, if you use information from sources 3 and 7, cite them like this: [3](url), [7](url). 
-    Don't include a citation if you are not referencing a source.
-    Cite sources liberally.
+    
+    Guidelines:
+    - When scoring candidates, please don't overscore candidates. Unless the candidate truly has a strong background in this trait, don't give them a score above 7.
+    - In the string of text, when you mention information that you get from a source, please include a citation in your evaluation by citing the number of the source that links to the url in a clickable markdown format.
+    - For example, if you use information from sources 3 and 7, cite them like this: [3](url), [7](url). 
+    - Don't include a citation if you are not referencing a source.
+    - Cite sources liberally.
 
     Here is the trait you are evaluating the candidate on:
     {section}
