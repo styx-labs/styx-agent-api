@@ -187,24 +187,24 @@ async def create_candidate_helper(
     try:
         graph_result = await run_search(
             job_data["job_description"],
-            candidate_data["context"],
+            candidate_data["context"],  
             candidate_data["name"],
             job_data["key_traits"],
             candidate_data["number_of_queries"],
             candidate_data["confidence_threshold"],
         )
+        candidate_data["sections"] = graph_result["sections"]
+        candidate_data["citations"] = graph_result["citations"]
+        candidate_data["status"] = "complete"
+        candidate_data["summary"] = graph_result["summary"]
+        candidate_data["overall_score"] = graph_result["overall_score"]
+        firestore.create_candidate(job_id, candidate_data, user_id)
     except Exception as e:
+        firestore.delete_candidate(job_id, candidate_data["public_identifier"], user_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error running candidate evaluation: {str(e)}",
         )
-
-    candidate_data["sections"] = graph_result["sections"]
-    candidate_data["citations"] = graph_result["citations"]
-    candidate_data["status"] = "complete"
-    candidate_data["summary"] = graph_result["summary"]
-    candidate_data["overall_score"] = graph_result["overall_score"]
-    firestore.create_candidate(job_id, candidate_data, user_id)
 
 
 @app.post("/jobs/{job_id}/candidates")
@@ -215,6 +215,13 @@ async def create_candidate(
     user_id: str = Depends(validate_user_id),
 ):
     try:
+        job_data = firestore.get_job(job_id, user_id)
+        if not job_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job with id {job_id} not found",
+            )
+        
         candidate_data = candidate.model_dump()
         if "url" in candidate_data:
             try:
@@ -229,13 +236,6 @@ async def create_candidate(
                     status_code=status.HTTP_502_BAD_GATEWAY,
                     detail=f"Failed to fetch LinkedIn profile: {str(e)}",
                 )
-
-        job_data = firestore.get_job(job_id, user_id)
-        if not job_data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Job with id {job_id} not found",
-            )
 
         candidate_data["status"] = "processing"
         firestore.create_candidate(job_id, candidate_data, user_id)
@@ -256,30 +256,12 @@ async def create_candidates_batch_helper(
     job_id: str, 
     candidates: list, 
     job_data: dict, 
-    batch_hash: str, 
     user_id: str
 ):
     tasks = []
-    try:
-        for candidate in candidates:
-            try:
-                name, context, public_identifier = get_linkedin_context(candidate["url"])
-                candidate["name"] = name
-                candidate["context"] = context
-                candidate["public_identifier"] = public_identifier
-            except Exception as e:
-                print(e)
-            candidate["number_of_queries"] = 5
-            candidate["confidence_threshold"] = 0.5
-            tasks.append(create_candidate_helper(job_id, candidate, job_data, user_id))
-        await asyncio.gather(*tasks)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating candidates batch: {str(e)}"
-        )
-    finally:
-        firestore.delete_candidate(job_id, batch_hash, user_id)
+    for candidate in candidates:
+        tasks.append(create_candidate_helper(job_id, candidate, job_data, user_id))
+    await asyncio.gather(*tasks)
 
 
 @app.post("/jobs/{job_id}/candidates_batch")
@@ -298,25 +280,26 @@ async def create_candidates_batch(
             )
         csvReader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'))
         candidates = []
-        try:
-            for rows in csvReader:
+        total_rows = 0
+        for rows in csvReader:
+            total_rows += 1
+            try:
                 candidate = {"url": rows['url'], "status": "processing"}
+                name, context, public_identifier = get_linkedin_context(candidate["url"])
+                candidate["name"] = name
+                candidate["context"] = context
+                candidate["public_identifier"] = public_identifier
+                candidate["number_of_queries"] = 5
+                candidate["confidence_threshold"] = 0.5
                 candidates.append(candidate)
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error reading CSV file: {str(e)}"
-            )
-        batch_hash = str(uuid.uuid4())
-        dummy_candidate = {}
-        dummy_candidate["status"] = "processing"
-        dummy_candidate["name"] = f"Batch of {len(candidates)} candidates"
-        dummy_candidate["public_identifier"] = batch_hash
-        firestore.create_candidate(job_id, dummy_candidate, user_id)
+                firestore.create_candidate(job_id, candidate, user_id)
+            except Exception as e:
+                print(f"Error processing candidate with URL {rows.get('url', 'unknown')}: {str(e)}")
+                continue  # Skip to the next candidate
         background_tasks.add_task(
-            create_candidates_batch_helper, job_id, candidates, job_data, batch_hash, user_id
+            create_candidates_batch_helper, job_id, candidates, job_data, user_id
         )
-        return {"message": "Candidates processing started"}
+        return {"message": f"Candidates processing started: successfully created {len(candidates)} candidates out of {total_rows} candidates"}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
