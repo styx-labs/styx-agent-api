@@ -22,6 +22,7 @@ class Candidate(BaseModel):
     name: str = None
     context: str = None
     url: str = None
+    public_identifier: str = None
     number_of_queries: int = 5
     confidence_threshold: float = 0.5
 

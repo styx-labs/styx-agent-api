@@ -177,6 +177,19 @@ def get_jobs(user_id: str = Depends(validate_user_id)):
         )
 
 
+@app.post("/jobs_recommend")
+def get_jobs_recommend(context: str, user_id: str = Depends(validate_user_id)):
+    try:
+        jobs = firestore.get_jobs_recommend(user_id, context)
+        return {"jobs": jobs}
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving jobs: {str(e)}",
+        )
+
+
 @app.delete("/jobs/{job_id}")
 def delete_job(job_id: str, user_id: str = Depends(validate_user_id)):
     try:
@@ -206,7 +219,7 @@ async def create_candidate(
         processor = CandidateProcessor(job_id, job_data, user_id)
         candidate_data = candidate.model_dump()
 
-        if "url" in candidate_data:
+        if candidate_data["url"]:
             candidate_data = processor.create_candidate_record(candidate_data["url"])
             if not candidate_data:
                 raise HTTPException(
@@ -219,6 +232,7 @@ async def create_candidate(
         return {"message": "Candidate processing started"}
 
     except Exception as e:
+        print(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating candidate: {str(e)}",
@@ -313,4 +327,15 @@ def get_job(job_id: str, user_id: str = Depends(validate_user_id)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving job: {str(e)}",
+        )
+
+@app.post("/get_linkedin_context")
+def get_linkedin_context_request(url: str, user_id: str = Depends(validate_user_id)):
+    try:
+        name, context, public_identifier =   get_linkedin_context(url)
+        return {"name": name, "context": context, "public_identifier": public_identifier}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving LinkedIn context: {str(e)}",
         )

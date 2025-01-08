@@ -31,6 +31,30 @@ def get_jobs(user_id: str) -> list:
     return jobs
 
 
+def get_jobs_recommend(user_id: str, context: str) -> list:
+    """Get most similar jobs for a specific user"""
+    emb = (
+        get_azure_openai().embeddings.create(
+            model="text-embedding-3-small",
+            input=context,
+        )
+        .data[0]
+        .embedding
+    )
+    jobs = []
+    jobs_ref = db.collection("users").document(user_id).collection("jobs").find_nearest(
+        vector_field="embedding",
+        query_vector=Vector(emb),
+        distance_measure=DistanceMeasure.COSINE,
+        limit=5,
+    )
+    for doc in jobs_ref.stream():
+        job = doc.to_dict()
+        job["id"] = doc.id
+        jobs.append(job)
+    return jobs
+
+
 def get_job(job_id: str, user_id: str) -> dict:
     """Get a specific job for a user"""
     doc_ref = (
