@@ -15,6 +15,15 @@ db = firestore.Client(database=os.getenv("DB"))
 
 def create_job(job_data: dict, user_id: str) -> str:
     """Create a job under the user's collection"""
+    emb_text = job_data["job_title"] + " " + job_data["job_description"]
+    job_data["embedding"] = Vector(
+        get_azure_openai().embeddings.create(
+            model="text-embedding-3-small",
+            input=emb_text,
+        )
+        .data[0]
+        .embedding
+    )
     doc_ref = db.collection("users").document(user_id).collection("jobs").document()
     doc_ref.set(job_data)
     return doc_ref.id
@@ -45,13 +54,15 @@ def get_jobs_recommend(user_id: str, context: str) -> list:
     jobs_ref = db.collection("users").document(user_id).collection("jobs").find_nearest(
         vector_field="embedding",
         query_vector=Vector(emb),
-        distance_measure=DistanceMeasure.COSINE,
+        distance_measure=DistanceMeasure.EUCLIDEAN,
         limit=5,
+        distance_result_field="vector_distance",
     )
     for doc in jobs_ref.stream():
         job = doc.to_dict()
         job["id"] = doc.id
         jobs.append(job)
+    jobs.sort(key=lambda x: x.get('vector_distance', float('inf')))
     return jobs
 
 
