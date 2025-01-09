@@ -31,6 +31,10 @@ class HeadlessEvaluatePayload(Candidate):
     job_description: str = None
 
 
+class ReachoutPayload(BaseModel):
+    format: str
+
+
 class HeadlessReachoutPayload(BaseModel):
     name: str
     job_description: str

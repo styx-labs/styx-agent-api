@@ -1,7 +1,6 @@
 from typing import List, Dict, Any
 import asyncio
 import csv
-import codecs
 from fastapi import HTTPException, status
 from services.proxycurl import get_linkedin_context
 import services.firestore as firestore
@@ -102,9 +101,9 @@ class CandidateProcessor:
             "total": total_urls,
         }
 
-    async def process_csv(self, file) -> dict:
+    async def process_csv(self, file_str) -> dict:
         """Process candidates from CSV file"""
-        csvReader = csv.DictReader(codecs.iterdecode(file, "utf-8"))
+        csvReader = csv.DictReader(file_str.splitlines())
         candidates = []
         total_rows = 0
         processed_rows = 0

@@ -131,6 +131,19 @@ def get_candidates(job_id: str, user_id: str) -> list:
     return candidates
 
 
+def get_candidate(job_id: str, candidate_id: str, user_id: str) -> dict:
+    """Get a specific candidate for a job"""
+    doc_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("jobs")
+        .document(job_id)
+        .collection("candidates")
+        .document(candidate_id)
+    )
+    return doc_ref.get().to_dict()
+
+
 def delete_candidate(job_id: str, candidate_id: str, user_id: str) -> bool:
     """Delete a specific candidate"""
     doc_ref = (

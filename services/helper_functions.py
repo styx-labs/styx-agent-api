@@ -20,7 +20,8 @@ from agents.prompts import (
     recommendation_prompt,
     trait_evaluation_prompt,
     search_query_prompt,
-    reachout_message_prompt
+    reachout_message_prompt_linkedin,
+    reachout_message_prompt_email
 )
 
 
@@ -232,14 +233,16 @@ def get_reachout_message(
     name: str,
     job_description: str,
     sections: list[dict],
-    citations: list[dict]
+    citations: list[dict],
+    format: str
 ) -> str:
     sections_str = "\n".join([f"{section['section']}: {section['content']} " for section in sections])
     citations_str = "\n".join([f"{citation['distilled_content']}" for citation in citations])
+    prompt = reachout_message_prompt_linkedin if format == "linkedin" else reachout_message_prompt_email
     output = llm.invoke(
         [
             SystemMessage(
-                content=reachout_message_prompt.format(
+                content=prompt.format(
                     name=name, 
                     job_description=job_description, 
                     sections=sections_str,
@@ -249,7 +252,7 @@ def get_reachout_message(
         ]
         + [
             HumanMessage(
-                content="Write a LinkedIn message to the candidate that is tailored to their profile and the information provided."
+                content="Write a message to the candidate that is tailored to their profile and the information provided."
             )
         ]
     )

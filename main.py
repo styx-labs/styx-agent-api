@@ -17,6 +17,7 @@ from models import (
     HeadlessEvaluatePayload,
     HeadlessReachoutPayload,
     BulkLinkedInPayload,
+    ReachoutPayload
 )
 from dotenv import load_dotenv
 from services.proxycurl import get_linkedin_context
@@ -201,6 +202,40 @@ def delete_job(job_id: str, user_id: str = Depends(validate_user_id)):
         )
 
 
+@app.post("/jobs/{job_id}/candidates/{candidate_id}/generate-reachout")
+async def generate_reachout(
+    job_id: str, candidate_id: str, payload: ReachoutPayload, user_id: str = Depends(validate_user_id)
+):
+    try:
+        job = firestore.get_job(job_id, user_id)
+        if not job:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job with id {job_id} not found",
+            )
+        candidate = firestore.get_candidate(job_id, candidate_id, user_id)
+        if not candidate:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Candidate with id {candidate_id} not found",
+            )
+        
+        reachout = get_reachout_message(
+            name=candidate["name"],
+            job_description=job["job_description"],
+            sections=candidate["sections"],
+            citations=candidate["citations"],
+            format=payload.format,
+        )
+        return {"reachout": reachout}
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating reachout message: {str(e)}",
+        )
+    
+
 @app.post("/jobs/{job_id}/candidates")
 async def create_candidate(
     job_id: str,
@@ -253,7 +288,9 @@ async def create_candidates_batch(
             )
 
         processor = CandidateProcessor(job_id, job_data, user_id)
-        background_tasks.add_task(processor.process_csv, file.file)
+        content = await file.read()
+        file_str = content.decode('utf-8')
+        background_tasks.add_task(processor.process_csv, file_str)
         return {"message": "Candidates processing started"}
 
     except Exception as e:
@@ -283,6 +320,7 @@ async def create_candidates_bulk(
         return {"message": "Candidates processing started"}
 
     except Exception as e:
+        print(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing bulk LinkedIn URLs: {str(e)}",
