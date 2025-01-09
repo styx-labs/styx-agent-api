@@ -1,5 +1,4 @@
 from fastapi import (
-    BackgroundTasks,
     FastAPI,
     HTTPException,
     status,
@@ -7,6 +6,7 @@ from fastapi import (
     Depends,
     File,
     UploadFile,
+    BackgroundTasks,
 )
 from fastapi.middleware.cors import CORSMiddleware
 import services.firestore as firestore
@@ -23,7 +23,6 @@ from services.proxycurl import get_linkedin_context
 from agents.evaluate_graph import run_search
 from services.helper_functions import get_key_traits, get_reachout_message
 from services.firebase_auth import verify_firebase_token
-import asyncio
 from agents.candidate_processor import CandidateProcessor
 
 
@@ -206,6 +205,7 @@ def delete_job(job_id: str, user_id: str = Depends(validate_user_id)):
 async def create_candidate(
     job_id: str,
     candidate: Candidate,
+    background_tasks: BackgroundTasks,
     user_id: str = Depends(validate_user_id),
 ):
     try:
@@ -219,16 +219,14 @@ async def create_candidate(
         processor = CandidateProcessor(job_id, job_data, user_id)
         candidate_data = candidate.model_dump()
 
-        if candidate_data["url"]:
-            candidate_data = processor.create_candidate_record(candidate_data["url"])
-            if not candidate_data:
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="Failed to fetch LinkedIn profile",
-                )
+        candidate_data = processor.create_candidate_record(candidate_data)
+        if not candidate_data:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to fetch LinkedIn profile",
+            )
 
-        # Start background processing
-        asyncio.create_task(processor.process_single_candidate(candidate_data))
+        background_tasks.add_task(processor.process_single_candidate, candidate_data)
         return {"message": "Candidate processing started"}
 
     except Exception as e:
@@ -242,6 +240,7 @@ async def create_candidate(
 @app.post("/jobs/{job_id}/candidates_batch")
 async def create_candidates_batch(
     job_id: str,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     user_id: str = Depends(validate_user_id),
 ):
@@ -254,7 +253,8 @@ async def create_candidates_batch(
             )
 
         processor = CandidateProcessor(job_id, job_data, user_id)
-        return await processor.process_csv(file.file)
+        background_tasks.add_task(processor.process_csv, file.file)
+        return {"message": "Candidates processing started"}
 
     except Exception as e:
         raise HTTPException(
@@ -266,6 +266,7 @@ async def create_candidates_batch(
 @app.post("/jobs/{job_id}/candidates_bulk")
 async def create_candidates_bulk(
     job_id: str,
+    background_tasks: BackgroundTasks,
     payload: BulkLinkedInPayload,
     user_id: str = Depends(validate_user_id),
 ):
@@ -278,7 +279,8 @@ async def create_candidates_bulk(
             )
 
         processor = CandidateProcessor(job_id, job_data, user_id)
-        return await processor.process_urls(payload.urls)
+        background_tasks.add_task(processor.process_urls, payload.urls)
+        return {"message": "Candidates processing started"}
 
     except Exception as e:
         raise HTTPException(

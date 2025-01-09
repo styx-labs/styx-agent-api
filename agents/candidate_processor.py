@@ -47,10 +47,10 @@ class CandidateProcessor:
             # Update the candidate in Firebase with complete status and results
             firestore.create_candidate(self.job_id, candidate_data, self.user_id)
         except Exception as e:
-            if candidate_data.get("public_identifier"):
-                firestore.delete_candidate(
-                    self.job_id, candidate_data["public_identifier"], self.user_id
-                )
+            firestore.delete_candidate(
+                self.job_id, candidate_data["public_identifier"], self.user_id
+            )
+            print(e)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error running candidate evaluation: {str(e)}",
@@ -61,20 +61,23 @@ class CandidateProcessor:
         tasks = [self.process_single_candidate(candidate) for candidate in candidates]
         await asyncio.gather(*tasks)
 
-    def create_candidate_record(self, url: str) -> dict:
+    def create_candidate_record(self, candidate_data: dict) -> dict:
         """Create initial candidate record from LinkedIn URL"""
         try:
-            name, context, public_identifier = get_linkedin_context(url)
+            if not all(k in candidate_data and candidate_data[k] for k in ["name", "context", "public_identifier"]):
+                name, context, public_identifier = get_linkedin_context(
+                    candidate_data["url"]
+                )
+                candidate_data["name"] = name
+                candidate_data["context"] = context
+                candidate_data["public_identifier"] = public_identifier
             return {
-                "url": url,
                 "status": "processing",
-                "name": name,
-                "context": context,
-                "public_identifier": public_identifier,
                 **self.default_settings,
+                **candidate_data,
             }
         except Exception as e:
-            print(f"Error processing LinkedIn URL {url}: {str(e)}")
+            print(f"Error processing LinkedIn URL {candidate_data['url']}: {str(e)}")
             return None
 
     async def process_urls(self, urls: List[str]) -> dict:
@@ -84,7 +87,7 @@ class CandidateProcessor:
         processed_urls = 0
 
         for url in urls:
-            candidate = self.create_candidate_record(url)
+            candidate = self.create_candidate_record({"url": url})
             if candidate:
                 candidates.append(candidate)
                 firestore.create_candidate(self.job_id, candidate, self.user_id)
@@ -109,7 +112,7 @@ class CandidateProcessor:
         for row in csvReader:
             total_rows += 1
             if url := row.get("url"):
-                candidate = self.create_candidate_record(url)
+                candidate = self.create_candidate_record({"url": url})
                 if candidate:
                     candidates.append(candidate)
                     processed_rows += 1

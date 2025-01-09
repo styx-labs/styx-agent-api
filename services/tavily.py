@@ -2,8 +2,8 @@ from tavily import AsyncTavilyClient
 import asyncio
 from langsmith import traceable
 
-tavily_async_client = AsyncTavilyClient()
 
+tavily_async_client = AsyncTavilyClient()
 
 @traceable(name="tavily_search_async")
 async def tavily_search_async(search_queries):

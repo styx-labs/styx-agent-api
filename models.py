@@ -21,7 +21,7 @@ class JobDescription(BaseModel):
 class Candidate(BaseModel):
     name: str = None
     context: str = None
-    url: str = None
+    url: str
     public_identifier: str = None
     number_of_queries: int = 5
     confidence_threshold: float = 0.5
