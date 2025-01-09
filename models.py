@@ -1,10 +1,31 @@
-from pydantic import BaseModel
-from typing import List
+from enum import Enum
+from typing import List, Optional, Union
+from pydantic import BaseModel, Field
+
+
+class TraitType(str, Enum):
+    BOOLEAN = "boolean"
+    NUMERIC = "numeric"
+    SCORE = "score"
+    CATEGORICAL = "categorical"
+
+    @classmethod
+    def _missing_(cls, value: str):
+        # Handle uppercase values by converting to lowercase
+        if isinstance(value, str):
+            return cls(value.lower())
+        return None
 
 
 class KeyTrait(BaseModel):
     trait: str
     description: str
+    trait_type: TraitType
+    value_type: Optional[str] = None  # e.g. "years", "location", "tech_stack"
+    min_value: Optional[float] = None  # for numeric traits
+    max_value: Optional[float] = None  # for numeric traits
+    categories: Optional[List[str]] = None  # for categorical traits
+    required: bool = True
 
 
 class Job(BaseModel):
@@ -55,6 +76,7 @@ class ParaformEvaluateGraphLinkedinPayload(BaseModel):
 
 class BulkLinkedInPayload(BaseModel):
     urls: List[str]
+
 
 class GetEmailPayload(BaseModel):
     linkedin_profile_url: str

@@ -5,6 +5,7 @@ from fastapi import HTTPException, status
 from services.proxycurl import get_linkedin_context
 import services.firestore as firestore
 from agents.evaluate_graph import run_search
+from models import KeyTrait
 
 
 class CandidateProcessor:
@@ -23,11 +24,14 @@ class CandidateProcessor:
             # Create the candidate in Firebase first with processing status
             firestore.create_candidate(self.job_id, candidate_data, self.user_id)
 
+            # Convert key_traits from dict to KeyTrait objects
+            key_traits = [KeyTrait(**trait) for trait in self.job_data["key_traits"]]
+
             graph_result = await run_search(
                 self.job_data["job_description"],
                 candidate_data["context"],
                 candidate_data["name"],
-                self.job_data["key_traits"],
+                key_traits,  # Pass the KeyTrait objects
                 candidate_data["number_of_queries"],
                 candidate_data["confidence_threshold"],
             )
@@ -63,7 +67,10 @@ class CandidateProcessor:
     def create_candidate_record(self, candidate_data: dict) -> dict:
         """Create initial candidate record from LinkedIn URL"""
         try:
-            if not all(k in candidate_data and candidate_data[k] for k in ["name", "context", "public_identifier"]):
+            if not all(
+                k in candidate_data and candidate_data[k]
+                for k in ["name", "context", "public_identifier"]
+            ):
                 name, context, public_identifier = get_linkedin_context(
                     candidate_data["url"]
                 )

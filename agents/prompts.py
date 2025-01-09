@@ -2,21 +2,33 @@
 This file contains all the prompts.
 """
 
-
 key_traits_prompt = """
-    You will be given a job description.
-    Please return 3 things:
-    1) An array of 5-7 traits that candidates should be evaluated on. Please return the trait and a description of the trait.
-    2) The job title
-    3) The company name
-    
+    You are an expert at analyzing job descriptions and extracting key requirements and traits.
+    Given a job description, please extract the key requirements that candidates should be evaluated on.
+
+    Requirements can be of different types:
+    1. boolean: Yes/no requirements (e.g. "Must be willing to work in San Francisco")
+    2. numeric: Quantitative requirements with specific units (e.g. "4+ years of experience")
+    3. score: Skills or qualities that should be rated on a 0-10 scale (e.g. "Proficiency in TypeScript")
+    4. categorical: Requirements that fall into specific categories (e.g. "Tech stack: Python/Go/Java")
+
+    For each requirement, provide:
+    - A short, specific trait name (not a full sentence)
+    - A detailed description of the trait and how to evaluate it
+    - The trait type (boolean, numeric, score, or categorical)
+    - For numeric traits: The value type (e.g. "years") and minimum/maximum values if specified
+    - For categorical traits: The list of valid categories
+    - Whether the trait is required or a "nice to have"
+
     Guidelines:
-    - Traits should not be full sentences, but rather short phrases that are specific and concise.
-    - Traits should not be redundant.
-    - Traits should be specific and concrete, not just "Adaptability" or "Communication Skills" but rather "Experience on cross-functional teams" or "Experience with React".
-    - If there are hard traits in the job description such as "PhD or Masters in X" or "Has worked at Y", please include that trait in the list.
-    - Descriptions should be around two sentences, and serve as a guide for the evaluator to understand how to evaluate a candidate in this trait.
-    - If you are unable to find a job title or company name, please return an empty string for those fields.
+    - Extract 5-7 key traits that best represent the job requirements
+    - Traits should not be redundant
+    - Traits should be specific and concrete (e.g. "Experience with distributed systems" not just "Technical skills")
+    - Include any hard requirements mentioned (e.g. education, location, experience level)
+    - For skills and qualities that can't be measured numerically, use score type
+    - For location, tech stack, and similar categorical requirements, use categorical type
+    - For clear yes/no requirements, use boolean type
+    - For experience levels and other measurable requirements, use numeric type
 
     Here is the job description:
     {job_description}
@@ -121,27 +133,45 @@ recommendation_prompt = """
 
 trait_evaluation_prompt = """
     You are an expert at evaluating candidates for a job.
-    You are given a specific trait that you are evaluating the candidate on, as well as a description of the trait, which you should use to judge and evaluate the candidate.
+    You are given a specific trait that you are evaluating the candidate on, as well as a description of the trait and its type.
     You are also given a string of sources that contain information about the candidate.
-    Write a evaluation of the candidate in this specific trait based on the provided information.
-    It is possible that there is no information about the candidate in this trait - if this is the case, please mention that no information was found regarding the trait, not that the candidate does not have the trait.
+    Write an evaluation of the candidate in this specific trait based on the provided information.
+    It is possible that there is no information about the candidate in this trait - if this is the case, please mention that no information was found regarding the trait.
+
+    The trait type is: {trait_type}
+    {type_specific_instructions}
+
+    For numeric traits:
+    Value type: {value_type}
+    Minimum required: {min_value}
+    Maximum (if applicable): {max_value}
+
+    For categorical traits:
+    Valid categories: {categories}
 
     Output two values:
-    - An integer score from 0 to 10 that rates the candidate based on their experience in this trait.
-    - A string of text that is the evaluation of the candidate in this specific trait based on the provided information. This should be a no more than 100 words.
+    1. A value appropriate for the trait type:
+        - For boolean: true/false
+        - For numeric: The actual number (e.g. 5 for 5 years)
+        - For score: An integer from 0 to 10
+        - For categorical: One of the valid categories
+    2. A string of text that is the evaluation of the candidate in this specific trait based on the provided information. This should be no more than 100 words.
 
-    
     Guidelines:
-    - When scoring candidates, please don't overscore candidates. Unless the candidate truly has a strong background in this trait, don't give them a score above 7.
-    - In the string of text, when you mention information that you get from a source, please include a citation in your evaluation by citing the number of the source that links to the url in a clickable markdown format.
+    - For score traits, don't overscore candidates. Unless they truly have a strong background, don't give them a score above 7.
+    - For numeric traits, be precise and extract the actual number from the sources.
+    - For boolean traits, only return true if there's clear evidence.
+    - For categorical traits, only select from the provided categories.
+    - In the string of text, when you mention information from a source, include a citation by citing the number of the source that links to the url in clickable markdown format.
     - For example, if you use information from sources 3 and 7, cite them like this: [3](url), [7](url). 
     - Don't include a citation if you are not referencing a source.
     - Cite sources liberally.
 
     Here is the trait you are evaluating the candidate on:
     {section}
-    Here is the description of the trait, which you should use to evaluate the candidate:
+    Here is the description of the trait:
     {trait_description}
+
     Here is the candidate's name:
     {candidate_full_name}
     Here is the candidate's basic profile:
