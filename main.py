@@ -17,10 +17,11 @@ from models import (
     HeadlessEvaluatePayload,
     HeadlessReachoutPayload,
     BulkLinkedInPayload,
-    ReachoutPayload
+    ReachoutPayload,
+    GetEmailPayload
 )
 from dotenv import load_dotenv
-from services.proxycurl import get_linkedin_context
+from services.proxycurl import get_linkedin_context, get_email
 from agents.evaluate_graph import run_search
 from services.helper_functions import get_key_traits, get_reachout_message
 from services.firebase_auth import verify_firebase_token
@@ -372,10 +373,22 @@ def get_job(job_id: str, user_id: str = Depends(validate_user_id)):
 @app.post("/get_linkedin_context")
 def get_linkedin_context_request(url: str, user_id: str = Depends(validate_user_id)):
     try:
-        name, context, public_identifier =   get_linkedin_context(url)
+        name, context, public_identifier = get_linkedin_context(url)
         return {"name": name, "context": context, "public_identifier": public_identifier}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving LinkedIn context: {str(e)}",
+        )
+
+@app.post("/get-email")
+def get_email_request(payload: GetEmailPayload, user_id: str = Depends(validate_user_id)):
+    try:
+        email = get_email(payload.linkedin_profile_url)
+        return {"email": email}
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving email: {str(e)}",
         )

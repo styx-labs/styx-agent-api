@@ -55,3 +55,6 @@ class ParaformEvaluateGraphLinkedinPayload(BaseModel):
 
 class BulkLinkedInPayload(BaseModel):
     urls: List[str]
+
+class GetEmailPayload(BaseModel):
+    linkedin_profile_url: str

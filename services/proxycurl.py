@@ -35,3 +35,15 @@ def get_linkedin_context(url):
             if "school" in e and "degree_name" in e and "field_of_study" in e:
                 context += f"Education: {e['school']}; {e['degree_name']} in {e['field_of_study']}\n"
     return name, context, response["public_identifier"]
+
+def get_email(linkedin_profile_url: str):
+    api_key = os.getenv("PROXYCURL_API_KEY")
+    headers = {"Authorization": "Bearer " + api_key}
+    api_endpoint = "https://nubela.co/proxycurl/api/contact-api/personal-email"
+    params = {
+        "linkedin_profile_url": linkedin_profile_url,
+        "page_size": 1,
+    }
+    response = requests.get(api_endpoint, params=params, headers=headers)
+    response = response.json()
+    return response["emails"][0]
