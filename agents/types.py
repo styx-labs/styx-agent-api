@@ -2,7 +2,7 @@
 This file contains all the types for LLM calls and Langgraph state types.
 """
 
-from typing import List, Annotated
+from typing import List, Annotated, Union
 from typing_extensions import TypedDict
 import operator
 from pydantic import BaseModel, Field
@@ -39,8 +39,13 @@ class RecommendationOutput(BaseModel):
 
 
 class TraitEvaluationOutput(BaseModel):
-    score: int
+    value: Union[
+        bool, int, float, str
+    ]  # Can be boolean, numeric, score (0-10), or categorical
     evaluation: str
+    trait_type: (
+        str  # The type of trait being evaluated (BOOLEAN, NUMERIC, SCORE, CATEGORICAL)
+    )
 
 
 # Langgraph state types
@@ -52,14 +57,18 @@ class EvaluationState(TypedDict):
     key_traits: List[str]
     number_of_queries: int
     search_queries: list[SearchQuery]
-    completed_sections: Annotated[list, operator.add]   # This is for parallelizing section writing
-    validated_sources: Annotated[list, operator.add]   # This is for parallelizing source validation
+    completed_sections: Annotated[
+        list, operator.add
+    ]  # This is for parallelizing section writing
+    validated_sources: Annotated[
+        list, operator.add
+    ]  # This is for parallelizing source validation
     recommendation: str
     summary: str
     overall_score: float
-    section: str   # This is for parallelizing section writing
-    section_description: str   # This is for parallelizing section writing
-    source: str   # This is for parallelizing source validation
+    section: str  # This is for parallelizing section writing
+    section_description: str  # This is for parallelizing section writing
+    source: str  # This is for parallelizing source validation
     sources_dict: dict
     citations: list[dict]
     confidence_threshold: float

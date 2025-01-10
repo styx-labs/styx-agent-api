@@ -17,7 +17,8 @@ def create_job(job_data: dict, user_id: str) -> str:
     """Create a job under the user's collection"""
     emb_text = job_data["job_title"] + " " + job_data["job_description"]
     job_data["embedding"] = Vector(
-        get_azure_openai().embeddings.create(
+        get_azure_openai()
+        .embeddings.create(
             model="text-embedding-3-small",
             input=emb_text,
         )
@@ -43,7 +44,8 @@ def get_jobs(user_id: str) -> list:
 def get_jobs_recommend(user_id: str, context: str) -> list:
     """Get most similar jobs for a specific user"""
     emb = (
-        get_azure_openai().embeddings.create(
+        get_azure_openai()
+        .embeddings.create(
             model="text-embedding-3-small",
             input=context,
         )
@@ -51,18 +53,23 @@ def get_jobs_recommend(user_id: str, context: str) -> list:
         .embedding
     )
     jobs = []
-    jobs_ref = db.collection("users").document(user_id).collection("jobs").find_nearest(
-        vector_field="embedding",
-        query_vector=Vector(emb),
-        distance_measure=DistanceMeasure.EUCLIDEAN,
-        limit=5,
-        distance_result_field="vector_distance",
+    jobs_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("jobs")
+        .find_nearest(
+            vector_field="embedding",
+            query_vector=Vector(emb),
+            distance_measure=DistanceMeasure.EUCLIDEAN,
+            limit=5,
+            distance_result_field="vector_distance",
+        )
     )
     for doc in jobs_ref.stream():
         job = doc.to_dict()
         job["id"] = doc.id
         jobs.append(job)
-    jobs.sort(key=lambda x: x.get('vector_distance', float('inf')))
+    jobs.sort(key=lambda x: x.get("vector_distance", float("inf")))
     return jobs
 
 

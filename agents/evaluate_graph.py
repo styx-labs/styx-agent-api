@@ -13,8 +13,9 @@ from agents.types import (
     EvaluationState,
     EvaluationInputState,
     EvaluationOutputState,
-    SearchQuery
+    SearchQuery,
 )
+from models import TraitType
 from services.tavily import tavily_search_async
 from services.exa import exa_search_async
 
@@ -25,7 +26,9 @@ def generate_queries(state: EvaluationState):
     number_of_queries = state["number_of_queries"]
     candidate_full_name = state["candidate_full_name"]
 
-    content = get_search_queries(candidate_full_name, candidate_context, job_description, number_of_queries)
+    content = get_search_queries(
+        candidate_full_name, candidate_context, job_description, number_of_queries
+    )
 
     # Add a query for the candidate's name
     content.queries.append(SearchQuery(search_query=candidate_full_name))
@@ -44,7 +47,11 @@ def validate_and_distill_source(state: EvaluationState):
     candidate_context = state["candidate_context"]
     confidence_threshold = state["confidence_threshold"]
 
-    if not heuristic_validator(source["raw_content"] if source["raw_content"] else "", source["title"], candidate_full_name):
+    if not heuristic_validator(
+        source["raw_content"] if source["raw_content"] else "",
+        source["title"],
+        candidate_full_name,
+    ):
         return {"validated_sources": []}
 
     llm_output = llm_validator(
@@ -76,7 +83,12 @@ def compile_sources(state: EvaluationState):
         )
 
         citation_list.append(
-            {"index": i, "url": source["url"], "confidence": source["weight"], "distilled_content": source["distilled_content"]}
+            {
+                "index": i,
+                "url": source["url"],
+                "confidence": source["weight"],
+                "distilled_content": source["distilled_content"],
+            }
         )
 
     return {"source_str": formatted_text.strip(), "citations": citation_list}
@@ -90,17 +102,81 @@ def initiate_source_validation(state: EvaluationState):
 
 
 def evaluate_trait(state: EvaluationState):
-    section = state["section"]
-    section_description = state["section_description"]
+    trait = state["trait"]  # This should be the full KeyTrait object
     source_str = state["source_str"]
     candidate_full_name = state["candidate_full_name"]
     candidate_context = state["candidate_context"]
 
-    content = get_trait_evaluation(section, section_description, candidate_full_name, candidate_context, source_str)
-    
+    content = get_trait_evaluation(
+        trait.trait,  # Access as object attribute
+        trait.description,  # Access as object attribute
+        candidate_full_name,
+        candidate_context,
+        source_str,
+        trait_type=trait.trait_type,
+        value_type=trait.value_type,
+        min_value=trait.min_value,
+        max_value=trait.max_value,
+        categories=trait.categories,
+    )
+
+    # Convert the trait value to a normalized score for overall calculation
+    normalized_score = 0
+
+    # Convert value to appropriate type based on trait_type
+    try:
+        if content.trait_type == "TraitType.SCORE":
+            # Ensure numeric value for score type
+            value = (
+                float(content.value)
+                if isinstance(content.value, str)
+                else content.value
+            )
+            normalized_score = value  # Already 0-10
+        elif content.trait_type == "TraitType.BOOLEAN":
+            # Handle both string and boolean representations
+            if isinstance(content.value, str):
+                value = content.value.lower() in ["true", "yes", "1"]
+            else:
+                value = bool(content.value)
+            normalized_score = 10 if value else 0
+        # elif content.trait_type == "TraitType.NUMERIC":
+        #     # Ensure numeric value for numeric type
+        #     value = (
+        #         float(content.value)
+        #         if isinstance(content.value, str)
+        #         else content.value
+        #     )
+        #     if trait.min_value is not None:
+        #         if value >= trait.min_value:
+        #             normalized_score = 10
+        #         else:
+        #             normalized_score = (value / trait.min_value) * 10
+        # elif content.trait_type == "TraitType.CATEGORICAL":
+        #     # Handle both exact and case-insensitive matches
+        #     if trait.categories:
+        #         value = str(content.value).lower()
+        #         categories_lower = [c.lower() for c in trait.categories]
+        #         if value in categories_lower:
+        #             normalized_score = 10
+        #             # Use the properly cased version
+        #             content.value = trait.categories[categories_lower.index(value)]
+
+    except Exception as e:
+        print(f"Error normalizing score for trait {trait.trait}: {str(e)}")
+        normalized_score = 0
+
     return {
         "completed_sections": [
-            {"section": section, "content": content.evaluation, "score": content.score}
+            {
+                "section": trait.trait,
+                "content": content.evaluation,
+                "value": content.value,
+                "trait_type": content.trait_type,
+                "value_type": trait.value_type,
+                "normalized_score": normalized_score,
+                "required": trait.required,
+            }
         ]
     }
 
@@ -110,16 +186,23 @@ def write_recommendation(state: EvaluationState):
     completed_sections = state["completed_sections"]
     job_description = state["job_description"]
     completed_sections_str = "\n\n".join([s["content"] for s in completed_sections])
-    overall_score = sum([s["score"] for s in completed_sections]) / len(
-        completed_sections
-    )
-    
-    content = get_recommendation(job_description, candidate_full_name, completed_sections_str).recommendation
 
-    return {
-        "summary": content,
-        "overall_score": overall_score
-    }
+    # Calculate overall score only from required traits
+    required_sections = [
+        s for s in completed_sections if s["required"] and "normalized_score" in s
+    ]
+    if required_sections:
+        overall_score = sum([s["normalized_score"] for s in required_sections]) / len(
+            required_sections
+        )
+    else:
+        overall_score = 0
+
+    content = get_recommendation(
+        job_description, candidate_full_name, completed_sections_str
+    ).recommendation
+
+    return {"summary": content, "overall_score": overall_score}
 
 
 def compile_evaluation(state: EvaluationState):
@@ -127,17 +210,31 @@ def compile_evaluation(state: EvaluationState):
     completed_sections = state["completed_sections"]
     citations = state["citations"]
     ordered_sections = []
+
     for trait in key_traits:
         for section in completed_sections:
-            if section["section"] == trait["trait"]:
-                ordered_sections.append(section)
+            if section["section"] == trait.trait:
+                ordered_section = {
+                    "section": section["section"],
+                    "content": section["content"],
+                    "trait_type": section["trait_type"],
+                    "value": section["value"],
+                    "value_type": section["value_type"],
+                    "normalized_score": section["normalized_score"],
+                    "required": section["required"],
+                }
+                ordered_sections.append(ordered_section)
 
     return {"sections": ordered_sections, "citations": citations}
 
 
 def initiate_evaluation(state: EvaluationState):
     return [
-        Send("evaluate_trait", {"section": t["trait"], "section_description": t["description"], **state}) for t in state["key_traits"]
+        Send(
+            "evaluate_trait",
+            {"trait": t, **state},  # Pass the entire KeyTrait object
+        )
+        for t in state["key_traits"]
     ]
 
 

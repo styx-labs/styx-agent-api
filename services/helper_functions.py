@@ -21,8 +21,9 @@ from agents.prompts import (
     trait_evaluation_prompt,
     search_query_prompt,
     reachout_message_prompt_linkedin,
-    reachout_message_prompt_email
+    reachout_message_prompt_email,
 )
+from typing import List
 
 
 def clean_text(text: str) -> str:
@@ -49,29 +50,27 @@ def heuristic_validator(content, title, candidate_full_name: str) -> bool:
 
 @traceable(name="get_search_queries")
 def get_search_queries(
-    candidate_full_name: str, 
-    candidate_context: str, 
-    job_description: str, 
-    number_of_queries: int
+    candidate_full_name: str,
+    candidate_context: str,
+    job_description: str,
+    number_of_queries: int,
 ) -> QueriesOutput:
     structured_llm = llm.with_structured_output(QueriesOutput)
     output = structured_llm.invoke(
         [
             SystemMessage(
                 content=search_query_prompt.format(
-                    candidate_full_name=candidate_full_name, 
-                    candidate_context=candidate_context, 
-                    job_description=job_description, 
-                    number_of_queries=number_of_queries
+                    candidate_full_name=candidate_full_name,
+                    candidate_context=candidate_context,
+                    job_description=job_description,
+                    number_of_queries=number_of_queries,
                 )
             )
         ]
-        + [
-            HumanMessage(content="Generate search queries.")
-        ]
+        + [HumanMessage(content="Generate search queries.")]
     )
     return output
-           
+
 
 @traceable(name="llm_validator")
 def llm_validator(
@@ -98,10 +97,7 @@ def llm_validator(
 
 
 @traceable(name="distill_source")
-def distill_source(
-    raw_content, 
-    candidate_full_name: str
-) -> DistillSourceOutput:
+def distill_source(raw_content, candidate_full_name: str) -> DistillSourceOutput:
     structured_llm = llm.with_structured_output(DistillSourceOutput)
     output = structured_llm.invoke(
         [
@@ -137,9 +133,7 @@ def normalize_search_results(search_response) -> list:
     )
 
 
-def deduplicate_and_format_sources(
-    search_response
-) -> dict:
+def deduplicate_and_format_sources(search_response) -> dict:
     """Process search results and return formatted sources with citations."""
     # Get unified list of results
     sources_list = normalize_search_results(search_response)
@@ -151,81 +145,111 @@ def deduplicate_and_format_sources(
 
 
 @traceable(name="get_key_traits")
-def get_key_traits(
-    job_description: str
-) -> KeyTraitsOutput:
+def get_key_traits(job_description: str) -> KeyTraitsOutput:
     structured_llm = llm.with_structured_output(KeyTraitsOutput)
-    output = structured_llm.invoke(
+    return structured_llm.invoke(
         [
             SystemMessage(
-                content=key_traits_prompt.format(
-                    job_description=job_description
-                )
-            )
-        ]
-        + [
+                content=key_traits_prompt.format(job_description=job_description)
+            ),
             HumanMessage(
                 content="Generate a list of key traits relevant to the job description."
-            )
+            ),
         ]
     )
-    return output
 
 
 @traceable(name="get_recommendation")
 def get_recommendation(
-    job_description: str, 
-    candidate_full_name: str, 
-    completed_sections: str
+    job_description: str, candidate_full_name: str, completed_sections: str
 ) -> RecommendationOutput:
     structured_llm = llm.with_structured_output(RecommendationOutput)
-    output = structured_llm.invoke(
+    return structured_llm.invoke(
         [
             SystemMessage(
                 content=recommendation_prompt.format(
-                job_description=job_description, 
-                candidate_full_name=candidate_full_name, 
-                completed_sections=completed_sections
+                    job_description=job_description,
+                    candidate_full_name=candidate_full_name,
+                    completed_sections=completed_sections,
                 )
-            )
-        ]
-        + [
+            ),
             HumanMessage(
                 content="Write a recommendation on how good of a fit the candidate is for the job based on the provided information."
-            )
+            ),
         ]
     )
-    return output
 
 
 @traceable(name="get_trait_evaluation")
 def get_trait_evaluation(
-    section: str, 
-    trait_description: str, 
-    candidate_full_name: str, 
-    candidate_context: str, 
-    source_str: str
+    trait: str,
+    trait_description: str,
+    candidate_full_name: str,
+    candidate_context: str,
+    source_str: str,
+    trait_type: str = "SCORE",  # Default to SCORE for backward compatibility
+    value_type: str = None,
+    min_value: float = None,
+    max_value: float = None,
+    categories: List[str] = None,
 ) -> TraitEvaluationOutput:
+    """
+    Evaluate a candidate on a specific trait.
+
+    Args:
+        trait: The name of the trait
+        trait_description: Description of the trait and how to evaluate it
+        candidate_full_name: The candidate's full name
+        candidate_context: Basic context about the candidate
+        source_str: String containing all relevant sources about the candidate
+        trait_type: Type of trait (BOOLEAN, SCORE)
+        value_type: For numeric traits, what the number represents (e.g. "years")
+        min_value: For numeric traits, the minimum required value
+        max_value: For numeric traits, the maximum value (if applicable)
+        categories: For categorical traits, list of valid categories
+    """
     structured_llm = llm.with_structured_output(TraitEvaluationOutput)
-    output = structured_llm.invoke(
+
+    # Build the evaluation prompt based on trait type
+    type_specific_instructions = ""
+    if trait_type == "BOOLEAN":
+        type_specific_instructions = (
+            "Evaluate if the candidate meets this requirement (true/false)."
+        )
+    elif trait_type == "NUMERIC":
+        type_specific_instructions = f"Extract the specific {value_type} value. If a range is found, use the lower bound."
+    elif trait_type == "SCORE":
+        type_specific_instructions = "Rate the candidate from 0-10 on this trait."
+    elif trait_type == "CATEGORICAL":
+        categories_str = (
+            ", ".join(categories) if categories else "any relevant category"
+        )
+        type_specific_instructions = (
+            f"Determine which category best describes the candidate: {categories_str}"
+        )
+
+    return structured_llm.invoke(
         [
             SystemMessage(
                 content=trait_evaluation_prompt.format(
-                    section=section,
+                    section=trait,
                     trait_description=trait_description,
                     candidate_full_name=candidate_full_name,
                     candidate_context=candidate_context,
                     source_str=source_str,
+                    trait_type=trait_type,
+                    type_specific_instructions=type_specific_instructions,
+                    value_type=value_type,
+                    min_value=min_value,
+                    max_value=max_value,
+                    categories=categories,
                 )
-            )
-        ]
-        + [
+            ),
             HumanMessage(
-                content="Score and evaluate the candidate in this specific trait based on the provided information."
-            )
+                content="Evaluate the candidate on this trait based on the provided information."
+            ),
         ]
     )
-    return output
 
 
 @traceable(name="get_reachout_message")
@@ -234,19 +258,27 @@ def get_reachout_message(
     job_description: str,
     sections: list[dict],
     citations: list[dict],
-    format: str
+    format: str,
 ) -> str:
-    sections_str = "\n".join([f"{section['section']}: {section['content']} " for section in sections])
-    citations_str = "\n".join([f"{citation['distilled_content']}" for citation in citations])
-    prompt = reachout_message_prompt_linkedin if format == "linkedin" else reachout_message_prompt_email
+    sections_str = "\n".join(
+        [f"{section['section']}: {section['content']} " for section in sections]
+    )
+    citations_str = "\n".join(
+        [f"{citation['distilled_content']}" for citation in citations]
+    )
+    prompt = (
+        reachout_message_prompt_linkedin
+        if format == "linkedin"
+        else reachout_message_prompt_email
+    )
     output = llm.invoke(
         [
             SystemMessage(
                 content=prompt.format(
-                    name=name, 
-                    job_description=job_description, 
+                    name=name,
+                    job_description=job_description,
                     sections=sections_str,
-                    citations=citations_str
+                    citations=citations_str,
                 )
             )
         ]
