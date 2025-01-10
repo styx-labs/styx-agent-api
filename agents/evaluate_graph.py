@@ -15,6 +15,7 @@ from agents.types import (
     EvaluationOutputState,
     SearchQuery,
 )
+from models import TraitType
 from services.tavily import tavily_search_async
 from services.exa import exa_search_async
 
@@ -121,22 +122,52 @@ def evaluate_trait(state: EvaluationState):
 
     # Convert the trait value to a normalized score for overall calculation
     normalized_score = 0
-    if content.trait_type == "SCORE":
-        normalized_score = content.value  # Already 0-10
-    elif content.trait_type == "BOOLEAN":
-        normalized_score = 10 if content.value else 0  # True = 10, False = 0
-    elif content.trait_type == "NUMERIC":
-        if trait.min_value is not None:
-            # If value meets or exceeds minimum requirement, it's a 10
-            # Otherwise, it's proportional to how close it is to the requirement
-            if content.value >= trait.min_value:
-                normalized_score = 10
+
+    # Convert value to appropriate type based on trait_type
+    try:
+        if content.trait_type == "TraitType.SCORE":
+            # Ensure numeric value for score type
+            value = (
+                float(content.value)
+                if isinstance(content.value, str)
+                else content.value
+            )
+            normalized_score = value  # Already 0-10
+        elif content.trait_type == "TraitType.BOOLEAN":
+            # Handle both string and boolean representations
+            if isinstance(content.value, str):
+                value = content.value.lower() in ["true", "yes", "1"]
             else:
-                normalized_score = (content.value / trait.min_value) * 10
-    elif content.trait_type == "CATEGORICAL":
-        # For categorical, if it matches any of the acceptable categories, it's a 10
-        if trait.categories and content.value in trait.categories:
-            normalized_score = 10
+                value = bool(content.value)
+            normalized_score = 10 if value else 0
+        elif content.trait_type == "TraitType.NUMERIC":
+            # Ensure numeric value for numeric type
+            value = (
+                float(content.value)
+                if isinstance(content.value, str)
+                else content.value
+            )
+            if trait.min_value is not None:
+                if value >= trait.min_value:
+                    normalized_score = 10
+                else:
+                    normalized_score = (value / trait.min_value) * 10
+        elif content.trait_type == "TraitType.CATEGORICAL":
+            # Handle both exact and case-insensitive matches
+            if trait.categories:
+                value = str(content.value).lower()
+                categories_lower = [c.lower() for c in trait.categories]
+                if value in categories_lower:
+                    normalized_score = 10
+                    # Use the properly cased version
+                    content.value = trait.categories[categories_lower.index(value)]
+
+        print(
+            f"Trait: {trait.trait}, Type: {content.trait_type}, Value: {content.value}, Normalized Score: {normalized_score}"
+        )
+    except Exception as e:
+        print(f"Error normalizing score for trait {trait.trait}: {str(e)}")
+        normalized_score = 0
 
     return {
         "completed_sections": [
