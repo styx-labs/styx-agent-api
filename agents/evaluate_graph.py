@@ -140,31 +140,28 @@ def evaluate_trait(state: EvaluationState):
             else:
                 value = bool(content.value)
             normalized_score = 10 if value else 0
-        elif content.trait_type == "TraitType.NUMERIC":
-            # Ensure numeric value for numeric type
-            value = (
-                float(content.value)
-                if isinstance(content.value, str)
-                else content.value
-            )
-            if trait.min_value is not None:
-                if value >= trait.min_value:
-                    normalized_score = 10
-                else:
-                    normalized_score = (value / trait.min_value) * 10
-        elif content.trait_type == "TraitType.CATEGORICAL":
-            # Handle both exact and case-insensitive matches
-            if trait.categories:
-                value = str(content.value).lower()
-                categories_lower = [c.lower() for c in trait.categories]
-                if value in categories_lower:
-                    normalized_score = 10
-                    # Use the properly cased version
-                    content.value = trait.categories[categories_lower.index(value)]
+        # elif content.trait_type == "TraitType.NUMERIC":
+        #     # Ensure numeric value for numeric type
+        #     value = (
+        #         float(content.value)
+        #         if isinstance(content.value, str)
+        #         else content.value
+        #     )
+        #     if trait.min_value is not None:
+        #         if value >= trait.min_value:
+        #             normalized_score = 10
+        #         else:
+        #             normalized_score = (value / trait.min_value) * 10
+        # elif content.trait_type == "TraitType.CATEGORICAL":
+        #     # Handle both exact and case-insensitive matches
+        #     if trait.categories:
+        #         value = str(content.value).lower()
+        #         categories_lower = [c.lower() for c in trait.categories]
+        #         if value in categories_lower:
+        #             normalized_score = 10
+        #             # Use the properly cased version
+        #             content.value = trait.categories[categories_lower.index(value)]
 
-        print(
-            f"Trait: {trait.trait}, Type: {content.trait_type}, Value: {content.value}, Normalized Score: {normalized_score}"
-        )
     except Exception as e:
         print(f"Error normalizing score for trait {trait.trait}: {str(e)}")
         normalized_score = 0

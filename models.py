@@ -4,16 +4,16 @@ from pydantic import BaseModel, Field
 
 
 class TraitType(str, Enum):
-    BOOLEAN = "boolean"
-    NUMERIC = "numeric"
-    SCORE = "score"
-    CATEGORICAL = "categorical"
+    BOOLEAN = "BOOLEAN"
+    # NUMERIC = "numeric"
+    SCORE = "SCORE"
+    # CATEGORICAL = "categorical"
 
     @classmethod
     def _missing_(cls, value: str):
         # Handle uppercase values by converting to lowercase
         if isinstance(value, str):
-            return cls(value.lower())
+            return cls(value.upper())
         return None
 
 

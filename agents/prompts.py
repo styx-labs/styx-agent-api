@@ -7,17 +7,13 @@ key_traits_prompt = """
     Given a job description, please extract the key requirements that candidates should be evaluated on.
 
     Requirements can be of different types:
-    1. boolean: Yes/no requirements (e.g. "Must be willing to work in San Francisco")
-    2. numeric: Quantitative requirements with specific units (e.g. "4+ years of experience")
-    3. score: Skills or qualities that should be rated on a 0-10 scale (e.g. "Proficiency in TypeScript")
-    4. categorical: Requirements that fall into specific categories (e.g. "Tech stack: Python/Go/Java")
+    1. BOOLEAN: Yes/no requirements (e.g. "Must be willing to work in San Francisco")
+    2. SCORE: Skills or qualities that should be rated on a 0-10 scale (e.g. "Proficiency in TypeScript")
 
     For each requirement, provide:
     - A short, specific trait name (not a full sentence)
     - A detailed description of the trait and how to evaluate it
-    - The trait type (boolean, numeric, score, or categorical)
-    - For numeric traits: The value type (e.g. "years") and minimum/maximum values if specified
-    - For categorical traits: The list of valid categories
+    - The trait type (BOOLEAN, SCORE)
     - Whether the trait is required or a "nice to have"
 
     Guidelines:
@@ -25,10 +21,8 @@ key_traits_prompt = """
     - Traits should not be redundant
     - Traits should be specific and concrete (e.g. "Experience with distributed systems" not just "Technical skills")
     - Include any hard requirements mentioned (e.g. education, location, experience level)
-    - For skills and qualities that can't be measured numerically, use score type
-    - For location, tech stack, and similar categorical requirements, use categorical type
-    - For clear yes/no requirements, use boolean type
-    - For experience levels and other measurable requirements, use numeric type
+    - For clear yes/no requirements, use BOOLEAN type
+    - For skills and qualities that can't be measured numerically and experience levels and other measurable requirements use SCORE type
 
     Here is the job description:
     {job_description}
@@ -151,17 +145,13 @@ trait_evaluation_prompt = """
 
     Output two values:
     1. A value appropriate for the trait type:
-        - For boolean: true/false
-        - For numeric: The actual number (e.g. 5 for 5 years)
-        - For score: An integer from 0 to 10
-        - For categorical: One of the valid categories
+        - For BOOLEAN: true/false
+        - For SCORE: An integer from 0 to 10
     2. A string of text that is the evaluation of the candidate in this specific trait based on the provided information. This should be no more than 100 words.
 
     Guidelines:
-    - For score traits, don't overscore candidates. Unless they truly have a strong background, don't give them a score above 7.
-    - For numeric traits, be precise and extract the actual number from the sources.
-    - For boolean traits, only return true if there's clear evidence.
-    - For categorical traits, only select from the provided categories.
+    - For SCORE traits, don't overscore candidates. Unless they truly have a strong background, don't give them a score above 7. If it's not explicity stated, but can be inferred from previous experience, give them a score that's reasonable based on the information provided.
+    - For BOOLEAN traits, only return true if there's clear evidence.
     - In the string of text, when you mention information from a source, include a citation by citing the number of the source that links to the url in clickable markdown format.
     - For example, if you use information from sources 3 and 7, cite them like this: [3](url), [7](url). 
     - Don't include a citation if you are not referencing a source.

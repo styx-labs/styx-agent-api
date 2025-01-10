@@ -202,7 +202,7 @@ def get_trait_evaluation(
         candidate_full_name: The candidate's full name
         candidate_context: Basic context about the candidate
         source_str: String containing all relevant sources about the candidate
-        trait_type: Type of trait (BOOLEAN, NUMERIC, SCORE, CATEGORICAL)
+        trait_type: Type of trait (BOOLEAN, SCORE)
         value_type: For numeric traits, what the number represents (e.g. "years")
         min_value: For numeric traits, the minimum required value
         max_value: For numeric traits, the maximum value (if applicable)
