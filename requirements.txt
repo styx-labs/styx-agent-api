@@ -9,11 +9,10 @@ langchain-community
 langchain-core
 nltk
 requests
-fuzzywuzzy[speedup]
-azure-ai-textanalytics==5.2.0
 beautifulsoup4
 langgraph
 tavily-python
 urllib3
 firebase-admin>=6.4.0
 psutil
+openai==1.58.1
