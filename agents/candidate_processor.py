@@ -21,6 +21,12 @@ class CandidateProcessor:
     async def process_single_candidate(self, candidate_data: dict) -> None:
         """Process a single candidate with evaluation"""
         try:
+            search_credits = firestore.get_search_credits(self.user_id)
+            if search_credits <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You have no search credits remaining",
+                )
             # Create the candidate in Firebase first with processing status
             firestore.create_candidate(self.job_id, candidate_data, self.user_id)
 
@@ -46,6 +52,8 @@ class CandidateProcessor:
                     "overall_score": graph_result["overall_score"],
                 }
             )
+            
+            firestore.decrement_search_credits(self.user_id)
 
             # Update the candidate in Firebase with complete status and results
             firestore.create_candidate(self.job_id, candidate_data, self.user_id)

@@ -4,6 +4,7 @@ import dotenv
 from google.cloud.firestore_v1.vector import Vector
 from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
 import sys
+from services.search_credits import free_searches
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.azure_openai import get_azure_openai
@@ -11,6 +12,29 @@ from services.azure_openai import get_azure_openai
 dotenv.load_dotenv()
 
 db = firestore.Client(database=os.getenv("DB"))
+
+
+def get_search_credits(user_id: str) -> int:
+    """Get the number of search credits remaining for a user"""
+    doc_ref = db.collection("users").document(user_id)
+    doc = doc_ref.get()
+    user_dict = doc.to_dict() if doc.exists else {}
+    if "search_credits" not in user_dict:
+        user_dict["search_credits"] = free_searches
+        doc_ref.set(user_dict)
+    return user_dict["search_credits"]
+
+
+def decrement_search_credits(user_id: str) -> int:
+    """Decrement the number of search credits remaining for a user"""
+    doc_ref = db.collection("users").document(user_id)
+    doc = doc_ref.get()
+    user_dict = doc.to_dict() if doc.exists else {}
+    if "search_credits" not in user_dict:
+        user_dict["search_credits"] = free_searches
+    user_dict["search_credits"] -= 1
+    doc_ref.set(user_dict)
+    return user_dict["search_credits"]
 
 
 def create_job(job_data: dict, user_id: str) -> str:

@@ -248,33 +248,32 @@ async def create_candidate(
     background_tasks: BackgroundTasks,
     user_id: str = Depends(validate_user_id),
 ):
-    try:
-        job_data = firestore.get_job(job_id, user_id)
-        if not job_data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Job with id {job_id} not found",
-            )
-
-        processor = CandidateProcessor(job_id, job_data, user_id)
-        candidate_data = candidate.model_dump()
-
-        candidate_data = processor.create_candidate_record(candidate_data)
-        if not candidate_data:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Failed to fetch LinkedIn profile",
-            )
-
-        background_tasks.add_task(processor.process_single_candidate, candidate_data)
-        return {"message": "Candidate processing started"}
-
-    except Exception as e:
-        print(e)
+    search_credits = firestore.get_search_credits(user_id)
+    if search_credits <= 0:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating candidate: {str(e)}",
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="You have no search credits remaining",
         )
+    
+    job_data = firestore.get_job(job_id, user_id)
+    if not job_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job with id {job_id} not found",
+        )
+
+    processor = CandidateProcessor(job_id, job_data, user_id)
+    candidate_data = candidate.model_dump()
+
+    candidate_data = processor.create_candidate_record(candidate_data)
+    if not candidate_data:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch LinkedIn profile",
+        )
+
+    background_tasks.add_task(processor.process_single_candidate, candidate_data)
+    return {"message": "Candidate processing started"}
 
 
 @app.post("/jobs/{job_id}/candidates_batch")
@@ -284,25 +283,31 @@ async def create_candidates_batch(
     file: UploadFile = File(...),
     user_id: str = Depends(validate_user_id),
 ):
-    try:
-        job_data = firestore.get_job(job_id, user_id)
-        if not job_data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Job with id {job_id} not found",
-            )
+    search_credits = firestore.get_search_credits(user_id)
+    if search_credits <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="You have no search credits remaining",
+        )
+    
+    job_data = firestore.get_job(job_id, user_id)
+    if not job_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job with id {job_id} not found",
+        )
 
-        processor = CandidateProcessor(job_id, job_data, user_id)
+    processor = CandidateProcessor(job_id, job_data, user_id)
+    try:
         content = await file.read()
         file_str = content.decode("utf-8")
-        background_tasks.add_task(processor.process_csv, file_str)
-        return {"message": "Candidates processing started"}
-
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating candidates batch: {str(e)}",
+            detail=f"Error processing CSV file: {str(e)}",
         )
+    background_tasks.add_task(processor.process_csv, file_str)
+    return {"message": "Candidates processing started"}
 
 
 @app.post("/jobs/{job_id}/candidates_bulk")
@@ -312,24 +317,23 @@ async def create_candidates_bulk(
     payload: BulkLinkedInPayload,
     user_id: str = Depends(validate_user_id),
 ):
-    try:
-        job_data = firestore.get_job(job_id, user_id)
-        if not job_data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Job with id {job_id} not found",
-            )
-
-        processor = CandidateProcessor(job_id, job_data, user_id)
-        background_tasks.add_task(processor.process_urls, payload.urls)
-        return {"message": "Candidates processing started"}
-
-    except Exception as e:
-        print(e)
+    search_credits = firestore.get_search_credits(user_id)
+    if search_credits <= 0:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing bulk LinkedIn URLs: {str(e)}",
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="You have no search credits remaining",
         )
+    
+    job_data = firestore.get_job(job_id, user_id)
+    if not job_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job with id {job_id} not found",
+        )
+
+    processor = CandidateProcessor(job_id, job_data, user_id)
+    background_tasks.add_task(processor.process_urls, payload.urls)
+    return {"message": "Candidates processing started"}
 
 
 @app.get("/jobs/{job_id}/candidates")
@@ -403,4 +407,14 @@ def get_email_request(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving email: {str(e)}",
+        )
+
+@app.post("/get-search-credits")
+def get_search_credits(user_id: str = Depends(validate_user_id)):
+    try:
+        return {"search_credits": firestore.get_search_credits(user_id)}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving search credits: {str(e)}",
         )
