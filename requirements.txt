@@ -4,7 +4,7 @@ fastapi[standard]
 google-cloud-firestore==2.19.0
 python-dotenv==1.0.0
 langchain
-langchain-openai
+langchain-openai==0.2.14
 langchain-community
 langchain-core
 nltk
