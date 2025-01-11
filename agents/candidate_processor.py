@@ -6,6 +6,9 @@ from services.proxycurl import get_linkedin_context
 import services.firestore as firestore
 from agents.evaluate_graph import run_search
 from models import KeyTrait
+import psutil
+import logging
+from datetime import datetime
 
 
 class CandidateProcessor:
@@ -17,10 +20,22 @@ class CandidateProcessor:
             "number_of_queries": 5,
             "confidence_threshold": 0.5,
         }
+        logging.info(f"[MEMORY] Initializing CandidateProcessor - {self._get_memory_usage()}")
+
+    def _get_memory_usage(self) -> str:
+        """Get current memory usage details"""
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        return (
+            f"Time: {datetime.now().isoformat()} | "
+            f"RSS: {memory_info.rss / 1024 / 1024:.2f}MB | "
+            f"VMS: {memory_info.vms / 1024 / 1024:.2f}MB"
+        )
 
     async def process_single_candidate(self, candidate_data: dict) -> None:
         """Process a single candidate with evaluation"""
         try:
+            logging.info(f"[MEMORY] Starting candidate processing - {self._get_memory_usage()}")
             search_credits = firestore.get_search_credits(self.user_id)
             if search_credits <= 0:
                 raise HTTPException(
@@ -41,6 +56,7 @@ class CandidateProcessor:
                 candidate_data["number_of_queries"],
                 candidate_data["confidence_threshold"],
             )
+            logging.info(f"[MEMORY] After graph search - {self._get_memory_usage()}")
 
             # Update the candidate with evaluation results
             candidate_data.update(
@@ -57,7 +73,9 @@ class CandidateProcessor:
 
             # Update the candidate in Firebase with complete status and results
             firestore.create_candidate(self.job_id, candidate_data, self.user_id)
+            logging.info(f"[MEMORY] Completed candidate processing - {self._get_memory_usage()}")
         except Exception as e:
+            logging.error(f"[MEMORY] Error in processing - {self._get_memory_usage()}")
             firestore.delete_candidate(
                 self.job_id, candidate_data["public_identifier"], self.user_id
             )
@@ -69,8 +87,10 @@ class CandidateProcessor:
 
     async def process_batch(self, candidates: List[Dict[str, Any]]) -> None:
         """Process a batch of candidates concurrently"""
+        logging.info(f"[MEMORY] Starting batch processing of {len(candidates)} candidates - {self._get_memory_usage()}")
         tasks = [self.process_single_candidate(candidate) for candidate in candidates]
         await asyncio.gather(*tasks)
+        logging.info(f"[MEMORY] Completed batch processing - {self._get_memory_usage()}")
 
     def create_candidate_record(self, candidate_data: dict) -> dict:
         """Create initial candidate record from LinkedIn URL"""
@@ -96,6 +116,7 @@ class CandidateProcessor:
 
     async def process_urls(self, urls: List[str]) -> dict:
         """Process a list of LinkedIn URLs"""
+        logging.info(f"[MEMORY] Starting URL processing for {len(urls)} URLs - {self._get_memory_usage()}")
         candidates = []
         total_urls = len(urls)
         processed_urls = 0
@@ -109,6 +130,7 @@ class CandidateProcessor:
 
         # Start background processing
         asyncio.create_task(self.process_batch(candidates))
+        logging.info(f"[MEMORY] Completed URL processing setup - {self._get_memory_usage()}")
 
         return {
             "message": f"Bulk processing started: successfully queued {processed_urls} out of {total_urls} LinkedIn profiles",

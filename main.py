@@ -27,6 +27,8 @@ from agents.evaluate_graph import run_search
 from services.helper_functions import get_key_traits, get_reachout_message
 from services.firebase_auth import verify_firebase_token
 from agents.candidate_processor import CandidateProcessor
+import logging
+import sys
 
 
 load_dotenv()
@@ -39,6 +41,15 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Configure logging
+logging.basicConfig(
+    level=logging.CRITICAL,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
 )
 
 
