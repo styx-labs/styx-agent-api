@@ -1,0 +1,1 @@
+free_searches = 100
