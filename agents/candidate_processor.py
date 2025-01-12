@@ -20,7 +20,9 @@ class CandidateProcessor:
             "number_of_queries": 5,
             "confidence_threshold": 0.5,
         }
-        logging.info(f"[MEMORY] Initializing CandidateProcessor - {self._get_memory_usage()}")
+        logging.info(
+            f"[MEMORY] Initializing CandidateProcessor - {self._get_memory_usage()}"
+        )
 
     def _get_memory_usage(self) -> str:
         """Get current memory usage details"""
@@ -35,7 +37,9 @@ class CandidateProcessor:
     async def process_single_candidate(self, candidate_data: dict) -> None:
         """Process a single candidate with evaluation"""
         try:
-            logging.info(f"[MEMORY] Starting candidate processing - {self._get_memory_usage()}")
+            logging.info(
+                f"[MEMORY] Starting candidate processing - {self._get_memory_usage()}"
+            )
             search_credits = firestore.get_search_credits(self.user_id)
             if search_credits <= 0:
                 raise HTTPException(
@@ -68,12 +72,14 @@ class CandidateProcessor:
                     "overall_score": graph_result["overall_score"],
                 }
             )
-            
+
             firestore.decrement_search_credits(self.user_id)
 
             # Update the candidate in Firebase with complete status and results
             firestore.create_candidate(self.job_id, candidate_data, self.user_id)
-            logging.info(f"[MEMORY] Completed candidate processing - {self._get_memory_usage()}")
+            logging.info(
+                f"[MEMORY] Completed candidate processing - {self._get_memory_usage()}"
+            )
         except Exception as e:
             logging.error(f"[MEMORY] Error in processing - {self._get_memory_usage()}")
             firestore.delete_candidate(
@@ -87,10 +93,14 @@ class CandidateProcessor:
 
     async def process_batch(self, candidates: List[Dict[str, Any]]) -> None:
         """Process a batch of candidates concurrently"""
-        logging.info(f"[MEMORY] Starting batch processing of {len(candidates)} candidates - {self._get_memory_usage()}")
+        logging.info(
+            f"[MEMORY] Starting batch processing of {len(candidates)} candidates - {self._get_memory_usage()}"
+        )
         tasks = [self.process_single_candidate(candidate) for candidate in candidates]
         await asyncio.gather(*tasks)
-        logging.info(f"[MEMORY] Completed batch processing - {self._get_memory_usage()}")
+        logging.info(
+            f"[MEMORY] Completed batch processing - {self._get_memory_usage()}"
+        )
 
     def create_candidate_record(self, candidate_data: dict) -> dict:
         """Create initial candidate record from LinkedIn URL"""
@@ -116,9 +126,25 @@ class CandidateProcessor:
 
     async def process_urls(self, urls: List[str]) -> dict:
         """Process a list of LinkedIn URLs"""
-        logging.info(f"[MEMORY] Starting URL processing for {len(urls)} URLs - {self._get_memory_usage()}")
-        candidates = []
+        logging.info(
+            f"[MEMORY] Starting URL processing for {len(urls)} URLs - {self._get_memory_usage()}"
+        )
         total_urls = len(urls)
+
+        # Start background processing immediately
+        asyncio.create_task(self._process_urls_background(urls))
+        logging.info(
+            f"[MEMORY] Completed URL processing setup - {self._get_memory_usage()}"
+        )
+
+        return {
+            "message": f"Bulk processing started for {total_urls} LinkedIn profiles",
+            "total": total_urls,
+        }
+
+    async def _process_urls_background(self, urls: List[str]) -> None:
+        """Background processing of URLs"""
+        candidates = []
         processed_urls = 0
 
         for url in urls:
@@ -128,34 +154,34 @@ class CandidateProcessor:
                 firestore.create_candidate(self.job_id, candidate, self.user_id)
                 processed_urls += 1
 
-        # Start background processing
-        asyncio.create_task(self.process_batch(candidates))
-        logging.info(f"[MEMORY] Completed URL processing setup - {self._get_memory_usage()}")
-
-        return {
-            "message": f"Bulk processing started: successfully queued {processed_urls} out of {total_urls} LinkedIn profiles",
-            "processed": processed_urls,
-            "total": total_urls,
-        }
+        # Process the candidates in batch
+        await self.process_batch(candidates)
 
     async def process_csv(self, file_str) -> dict:
         """Process candidates from CSV file"""
+        total_rows = len(file_str.splitlines()) - 1  # Subtract header row
+
+        # Start background processing immediately
+        asyncio.create_task(self._process_csv_background(file_str))
+
+        return {
+            "message": f"Processing started for {total_rows} candidates from CSV",
+            "total": total_rows,
+        }
+
+    async def _process_csv_background(self, file_str) -> None:
+        """Background processing of CSV data"""
         csvReader = csv.DictReader(file_str.splitlines())
         candidates = []
-        total_rows = 0
         processed_rows = 0
 
         for row in csvReader:
-            total_rows += 1
             if url := row.get("url"):
                 candidate = self.create_candidate_record({"url": url})
                 if candidate:
                     candidates.append(candidate)
+                    firestore.create_candidate(self.job_id, candidate, self.user_id)
                     processed_rows += 1
 
-        # Start background processing
-        asyncio.create_task(self.process_batch(candidates))
-
-        return {
-            "message": f"Candidates processing started: successfully created {processed_rows} candidates out of {total_rows} candidates"
-        }
+        # Process the candidates in batch
+        await self.process_batch(candidates)

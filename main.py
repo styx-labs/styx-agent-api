@@ -46,10 +46,8 @@ app.add_middleware(
 # Configure logging
 logging.basicConfig(
     level=logging.CRITICAL,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
 )
 
 
@@ -265,7 +263,7 @@ async def create_candidate(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail="You have no search credits remaining",
         )
-    
+
     job_data = firestore.get_job(job_id, user_id)
     if not job_data:
         raise HTTPException(
@@ -300,7 +298,7 @@ async def create_candidates_batch(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail="You have no search credits remaining",
         )
-    
+
     job_data = firestore.get_job(job_id, user_id)
     if not job_data:
         raise HTTPException(
@@ -329,12 +327,14 @@ async def create_candidates_bulk(
     user_id: str = Depends(validate_user_id),
 ):
     search_credits = firestore.get_search_credits(user_id)
-    if search_credits <= 0:
+    required_credits = len(payload.urls)
+
+    if search_credits < required_credits:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail="You have no search credits remaining",
+            detail=f"Insufficient search credits. You have {search_credits} credits but need {required_credits} credits to process all URLs.",
         )
-    
+
     job_data = firestore.get_job(job_id, user_id)
     if not job_data:
         raise HTTPException(
@@ -419,6 +419,7 @@ def get_email_request(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving email: {str(e)}",
         )
+
 
 @app.post("/get-search-credits")
 def get_search_credits(user_id: str = Depends(validate_user_id)):
