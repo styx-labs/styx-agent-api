@@ -135,11 +135,12 @@ trait_evaluation_prompt = """
     The trait type is: {trait_type}
     {type_specific_instructions}
 
-    Output two values:
+    Output three values:
     1. A value appropriate for the trait type:
-        - For BOOLEAN: true/false
-        - For SCORE: An integer from 0 to 10
+        - For TraitType.BOOLEAN: true/false
+        - For TraitType.SCORE: An integer from 0 to 10
     2. A string of text that is the evaluation of the candidate in this specific trait based on the provided information. This should be no more than 100 words.
+    3. A string of text that describes what type of trait this is. [TraitType.BOOLEAN, TraitType.SCORE]
 
     Guidelines:
     - For SCORE traits, don't overscore candidates. Unless they truly have a strong background, don't give them a score above 7. If it's not explicity stated, but can be inferred from previous experience, give them a score that's reasonable based on the information provided.

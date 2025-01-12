@@ -189,9 +189,6 @@ def get_trait_evaluation(
     source_str: str,
     trait_type: str = "SCORE",  # Default to SCORE for backward compatibility
     value_type: str = None,
-    min_value: float = None,
-    max_value: float = None,
-    categories: List[str] = None,
 ) -> TraitEvaluationOutput:
     """
     Evaluate a candidate on a specific trait.
@@ -227,9 +224,6 @@ def get_trait_evaluation(
                     trait_type=trait_type,
                     type_specific_instructions=type_specific_instructions,
                     value_type=value_type,
-                    min_value=min_value,
-                    max_value=max_value,
-                    categories=categories,
                 )
             ),
             HumanMessage(

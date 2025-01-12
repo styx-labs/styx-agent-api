@@ -115,9 +115,6 @@ def evaluate_trait(state: EvaluationState):
         source_str,
         trait_type=trait.trait_type,
         value_type=trait.value_type,
-        min_value=trait.min_value,
-        max_value=trait.max_value,
-        categories=trait.categories,
     )
 
     # Convert the trait value to a normalized score for overall calculation
