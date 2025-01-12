@@ -135,14 +135,6 @@ trait_evaluation_prompt = """
     The trait type is: {trait_type}
     {type_specific_instructions}
 
-    For numeric traits:
-    Value type: {value_type}
-    Minimum required: {min_value}
-    Maximum (if applicable): {max_value}
-
-    For categorical traits:
-    Valid categories: {categories}
-
     Output two values:
     1. A value appropriate for the trait type:
         - For BOOLEAN: true/false

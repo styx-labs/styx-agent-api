@@ -39,13 +39,9 @@ class RecommendationOutput(BaseModel):
 
 
 class TraitEvaluationOutput(BaseModel):
-    value: Union[
-        bool, int, float, str
-    ]  # Can be boolean, numeric, score (0-10), or categorical
+    value: Union[bool, int]  # Can be boolean, score (0-10)
     evaluation: str
-    trait_type: (
-        str  # The type of trait being evaluated (BOOLEAN, NUMERIC, SCORE, CATEGORICAL)
-    )
+    trait_type: str  # The type of trait being evaluated (BOOLEAN, SCORE)
 
 
 # Langgraph state types

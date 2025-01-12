@@ -5,9 +5,7 @@ from pydantic import BaseModel, Field
 
 class TraitType(str, Enum):
     BOOLEAN = "BOOLEAN"
-    # NUMERIC = "numeric"
     SCORE = "SCORE"
-    # CATEGORICAL = "categorical"
 
     @classmethod
     def _missing_(cls, value: str):
@@ -22,9 +20,6 @@ class KeyTrait(BaseModel):
     description: str
     trait_type: TraitType
     value_type: Optional[str] = None  # e.g. "years", "location", "tech_stack"
-    min_value: Optional[float] = None  # for numeric traits
-    max_value: Optional[float] = None  # for numeric traits
-    categories: Optional[List[str]] = None  # for categorical traits
     required: bool = True
 
 

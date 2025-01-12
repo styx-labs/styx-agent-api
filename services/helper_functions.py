@@ -203,10 +203,6 @@ def get_trait_evaluation(
         candidate_context: Basic context about the candidate
         source_str: String containing all relevant sources about the candidate
         trait_type: Type of trait (BOOLEAN, SCORE)
-        value_type: For numeric traits, what the number represents (e.g. "years")
-        min_value: For numeric traits, the minimum required value
-        max_value: For numeric traits, the maximum value (if applicable)
-        categories: For categorical traits, list of valid categories
     """
     structured_llm = llm.with_structured_output(TraitEvaluationOutput)
 
@@ -216,17 +212,8 @@ def get_trait_evaluation(
         type_specific_instructions = (
             "Evaluate if the candidate meets this requirement (true/false)."
         )
-    elif trait_type == "NUMERIC":
-        type_specific_instructions = f"Extract the specific {value_type} value. If a range is found, use the lower bound."
     elif trait_type == "SCORE":
         type_specific_instructions = "Rate the candidate from 0-10 on this trait."
-    elif trait_type == "CATEGORICAL":
-        categories_str = (
-            ", ".join(categories) if categories else "any relevant category"
-        )
-        type_specific_instructions = (
-            f"Determine which category best describes the candidate: {categories_str}"
-        )
 
     return structured_llm.invoke(
         [
