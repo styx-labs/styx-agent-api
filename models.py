@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from datetime import datetime
 
 
 class TraitType(str, Enum):
@@ -19,7 +20,7 @@ class KeyTrait(BaseModel):
     trait: str
     description: str
     trait_type: TraitType
-    value_type: Optional[str] = None  # e.g. "years", "location", "tech_stack"
+    value_type: Optional[str] = None
     required: bool = True
 
 
@@ -28,6 +29,7 @@ class Job(BaseModel):
     key_traits: List[KeyTrait]
     job_title: str
     company_name: str
+    created_at: datetime = Field(default_factory=datetime.now)
 
 
 class JobDescription(BaseModel):
@@ -41,6 +43,7 @@ class Candidate(BaseModel):
     public_identifier: str = None
     number_of_queries: int = 5
     confidence_threshold: float = 0.5
+    updated_at: datetime = Field(default_factory=datetime.now)
 
 
 class HeadlessEvaluatePayload(Candidate):

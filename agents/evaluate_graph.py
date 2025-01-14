@@ -14,6 +14,7 @@ from agents.types import (
     EvaluationInputState,
     EvaluationOutputState,
     SearchQuery,
+    CachedEvaluationInputState,
 )
 from models import TraitType
 from services.tavily import tavily_search_async
@@ -214,6 +215,10 @@ def initiate_evaluation(state: EvaluationState):
     ]
 
 
+def initiate_cached_evaluation(state: EvaluationState):
+    return {}
+
+
 async def run_search(
     job_description: str,
     candidate_context: str,
@@ -256,5 +261,43 @@ async def run_search(
             key_traits=key_traits,
             number_of_queries=number_of_queries,
             confidence_threshold=confidence_threshold,
+        )
+    )
+
+async def run_search_cached(
+    job_description: str,
+    candidate_context: str,
+    candidate_full_name: str,
+    key_traits: list[dict],
+    citations: list[dict],
+    source_str: str,
+) -> EvaluationOutputState:
+    builder = StateGraph(
+        EvaluationState, input=CachedEvaluationInputState, output=EvaluationOutputState
+    )
+
+    builder.add_node("evaluate_trait", evaluate_trait)
+    builder.add_node("write_recommendation", write_recommendation)
+    builder.add_node("compile_evaluation", compile_evaluation)
+    builder.add_node("initiate_cached_evaluation", initiate_cached_evaluation)
+
+    builder.add_edge(START, "initiate_cached_evaluation")
+    builder.add_conditional_edges(
+        "initiate_cached_evaluation", initiate_evaluation, ["evaluate_trait"]
+    )
+    builder.add_edge("evaluate_trait", "write_recommendation")
+    builder.add_edge("write_recommendation", "compile_evaluation")
+    builder.add_edge("compile_evaluation", END)
+
+    graph = builder.compile()
+
+    return await graph.ainvoke(
+        CachedEvaluationInputState(
+            job_description=job_description,
+            candidate_context=candidate_context,
+            candidate_full_name=candidate_full_name,
+            key_traits=key_traits,
+            citations=citations,
+            source_str=source_str,
         )
     )

@@ -29,6 +29,7 @@ from services.firebase_auth import verify_firebase_token
 from agents.candidate_processor import CandidateProcessor
 import logging
 import sys
+from fastapi.concurrency import run_in_threadpool
 
 
 load_dotenv()
@@ -227,7 +228,7 @@ async def generate_reachout(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Job with id {job_id} not found",
             )
-        candidate = firestore.get_candidate(job_id, candidate_id, user_id)
+        candidate = firestore.get_full_candidate(job_id, candidate_id, user_id)
         if not candidate:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -274,7 +275,7 @@ async def create_candidate(
     processor = CandidateProcessor(job_id, job_data, user_id)
     candidate_data = candidate.model_dump()
 
-    candidate_data = processor.create_candidate_record(candidate_data)
+    candidate_data = await run_in_threadpool(lambda: processor.get_candidate_record(candidate_data))
     if not candidate_data:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -282,41 +283,8 @@ async def create_candidate(
         )
 
     background_tasks.add_task(processor.process_single_candidate, candidate_data)
+
     return {"message": "Candidate processing started"}
-
-
-@app.post("/jobs/{job_id}/candidates_batch")
-async def create_candidates_batch(
-    job_id: str,
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-    user_id: str = Depends(validate_user_id),
-):
-    search_credits = firestore.get_search_credits(user_id)
-    if search_credits <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail="You have no search credits remaining",
-        )
-
-    job_data = firestore.get_job(job_id, user_id)
-    if not job_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Job with id {job_id} not found",
-        )
-
-    processor = CandidateProcessor(job_id, job_data, user_id)
-    try:
-        content = await file.read()
-        file_str = content.decode("utf-8")
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing CSV file: {str(e)}",
-        )
-    background_tasks.add_task(processor.process_csv, file_str)
-    return {"message": "Candidates processing started"}
 
 
 @app.post("/jobs/{job_id}/candidates_bulk")
@@ -343,6 +311,7 @@ async def create_candidates_bulk(
         )
 
     processor = CandidateProcessor(job_id, job_data, user_id)
+
     background_tasks.add_task(processor.process_urls, payload.urls)
     return {"message": "Candidates processing started"}
 
@@ -353,6 +322,7 @@ def get_candidates(job_id: str, user_id: str = Depends(validate_user_id)):
         candidates = firestore.get_candidates(job_id, user_id)
         return {"candidates": candidates}
     except Exception as e:
+        print(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving candidates: {str(e)}",
@@ -364,7 +334,7 @@ def delete_candidate(
     job_id: str, candidate_id: str, user_id: str = Depends(validate_user_id)
 ):
     try:
-        success = firestore.delete_candidate(job_id, candidate_id, user_id)
+        success = firestore.remove_candidate_from_job(job_id, candidate_id, user_id)
         return {"success": success}
     except Exception as e:
         raise HTTPException(

@@ -79,8 +79,18 @@ class EvaluationInputState(TypedDict):
     confidence_threshold: float
 
 
+class CachedEvaluationInputState(TypedDict):
+    source_str: str
+    job_description: str
+    candidate_context: str
+    candidate_full_name: str
+    key_traits: list[KeyTrait]
+    citations: list[dict]
+    source_str: str
+
 class EvaluationOutputState(TypedDict):
     citations: list[dict]
     sections: list[dict]
     summary: str
     overall_score: float
+    source_str: str
