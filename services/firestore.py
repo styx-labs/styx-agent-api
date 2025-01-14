@@ -3,9 +3,10 @@ import os
 import dotenv
 from google.cloud.firestore_v1.vector import Vector
 from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
+from google.cloud.firestore_v1.base_query import FieldFilter
 import sys
 from services.search_credits import free_searches
-
+from datetime import datetime, timedelta, UTC
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.azure_openai import get_azure_openai
 
@@ -116,7 +117,7 @@ def delete_job(job_id: str, user_id: str) -> bool:
         db.collection("users").document(user_id).collection("jobs").document(job_id)
     )
 
-    # Delete all candidates first
+    # Remove all candidates from the job
     candidates_ref = job_ref.collection("candidates")
     delete_collection(candidates_ref)
 
@@ -125,28 +126,67 @@ def delete_job(job_id: str, user_id: str) -> bool:
     return True
 
 
-def create_candidate(job_id: str, candidate_data: dict, user_id: str) -> str:
-    """Create a candidate under a specific job"""
-    doc_ref = (
+def check_cached_candidate_exists(candidate_id: str):
+    """Check if a candidate exists and was updated within the last month"""
+    candidate_ref = db.collection("candidates").document(candidate_id)
+    doc = candidate_ref.get()
+    if not doc.exists:
+        return False
+    
+    candidate_data = doc.to_dict()
+    updated_at = candidate_data.get("updated_at")
+    if not updated_at:
+        return False
+        
+    # Create timezone-aware datetime for comparison
+    one_month_ago = datetime.now(UTC) - timedelta(days=30)
+    # Firestore timestamp should already be UTC-aware
+    return updated_at > one_month_ago
+
+
+def add_candidate_to_job(job_id: str, candidate_id: str, user_id: str, candidate_data: dict):
+    """Add a candidate to a job"""
+    job_ref = (
         db.collection("users")
         .document(user_id)
         .collection("jobs")
         .document(job_id)
         .collection("candidates")
+        .document(candidate_id)
     )
+    job_ref.set(candidate_data)
+
+
+def remove_candidate_from_job(job_id: str, candidate_id: str, user_id: str):
+    """Remove a candidate from a job"""
+    job_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("jobs")
+        .document(job_id)
+        .collection("candidates")
+        .document(candidate_id)
+    )
+    job_ref.delete()
+
+
+def create_candidate(candidate_data: dict) -> str:
+    """Create a candidate"""
+    candidates_ref = db.collection("candidates")
+
     if "public_identifier" in candidate_data:
-        doc_ref = doc_ref.document(candidate_data["public_identifier"])
+        candidates_ref = candidates_ref.document(candidate_data["public_identifier"])
         candidate_data["id"] = candidate_data["public_identifier"]
     else:
-        doc_ref = doc_ref.document()
-        candidate_data["id"] = doc_ref.id
-    doc_ref.set(candidate_data)
-    return doc_ref.id
+        candidates_ref = candidates_ref.document()
+        candidate_data["id"] = candidates_ref.id
+    candidates_ref.set(candidate_data)
+    return candidates_ref.id
 
 
 def get_candidates(job_id: str, user_id: str) -> list:
     """Get all candidates for a specific job"""
-    candidates = []
+    # Get all candidates linked to this job
     candidates_ref = (
         db.collection("users")
         .document(user_id)
@@ -155,36 +195,60 @@ def get_candidates(job_id: str, user_id: str) -> list:
         .collection("candidates")
         .stream()
     )
-    for doc in candidates_ref:
-        candidate = doc.to_dict()
-        candidate["id"] = doc.id
-        candidates.append(candidate)
-    return candidates
+    
+    # Build a list of candidates with merged data
+    all_candidates = []
+    for job_candidate in candidates_ref:
+        candidate_id = job_candidate.id
+        job_specific_data = job_candidate.to_dict()
+        
+        # Get base candidate data
+        base_candidate = (
+            db.collection("candidates")
+            .document(candidate_id)
+            .get()
+            .to_dict()
+        )
+        
+        if base_candidate:
+            # Merge base candidate data with job-specific data
+            # Job-specific data takes precedence
+            merged_data = {**base_candidate, **job_specific_data}
+            merged_data['id'] = candidate_id
+            all_candidates.append(merged_data)
+        else:
+            # If no base candidate exists, just use job-specific data
+            job_specific_data['id'] = candidate_id
+            all_candidates.append(job_specific_data)
+    
+    return all_candidates
 
 
-def get_candidate(job_id: str, candidate_id: str, user_id: str) -> dict:
+def get_cached_candidate(candidate_id: str) -> dict:
+    """Get a cached candidate"""
+    candidate_ref = db.collection("candidates").document(candidate_id).get().to_dict()
+    return candidate_ref
+
+
+def get_full_candidate(job_id: str, candidate_id: str, user_id: str) -> dict:
     """Get a specific candidate for a job"""
-    doc_ref = (
+    candidate_job_ref = (
         db.collection("users")
         .document(user_id)
         .collection("jobs")
         .document(job_id)
         .collection("candidates")
         .document(candidate_id)
+        .get()
+        .to_dict()
     )
-    return doc_ref.get().to_dict()
+    candidate_ref = db.collection("candidates").document(candidate_id).get().to_dict()
+    return {**candidate_ref, **candidate_job_ref}
 
 
-def delete_candidate(job_id: str, candidate_id: str, user_id: str) -> bool:
+def delete_candidate(candidate_id: str) -> bool:
     """Delete a specific candidate"""
-    doc_ref = (
-        db.collection("users")
-        .document(user_id)
-        .collection("jobs")
-        .document(job_id)
-        .collection("candidates")
-        .document(candidate_id)
-    )
+    doc_ref = db.collection("candidates").document(candidate_id)
     doc_ref.delete()
     return True
 
