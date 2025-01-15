@@ -16,3 +16,4 @@ urllib3
 firebase-admin>=6.4.0
 psutil
 openai==1.58.1
+langserve

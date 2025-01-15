@@ -7,6 +7,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 ENV ENVIRONMENT=production
 ENV DB=unilink-agent-db-prod
 ENV PEOPLE_DB=people-db-prod
+ENV EVAL_ENDPOINT=https://styx-evaluate-16250094868.us-central1.run.app/evaluate
+ENV SEARCH_ENDPOINT=https://styx-search-16250094868.us-central1.run.app/search
 
 ENV PORT=8080
 EXPOSE ${PORT}
