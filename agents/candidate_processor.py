@@ -1,15 +1,14 @@
-from typing import List, Dict, Any
+from typing import List
 import asyncio
-import csv
 from fastapi import HTTPException, status
 from services.proxycurl import get_linkedin_context
 import services.firestore as firestore
-from agents.evaluate_graph import run_search, run_search_cached
 from models import KeyTrait, Candidate
 import psutil
 import logging
 from datetime import datetime
 from fastapi.concurrency import run_in_threadpool
+from services.evaluate import run_graph, run_graph_cached
 
 
 class CandidateProcessor:
@@ -49,7 +48,7 @@ class CandidateProcessor:
 
             if firestore.check_cached_candidate_exists(candidate_data["public_identifier"]):
                 cached_candidate = firestore.get_cached_candidate(candidate_data["public_identifier"])
-                graph_result = await run_search_cached(
+                graph_result = await run_graph_cached(
                     self.job_data["job_description"],
                     candidate_data["context"],
                     candidate_data["name"],
@@ -58,7 +57,7 @@ class CandidateProcessor:
                     cached_candidate["source_str"],
                 )
             else:
-                graph_result = await run_search(
+                graph_result = await run_graph(
                     self.job_data["job_description"],
                     candidate_data["context"],
                     candidate_data["name"],
