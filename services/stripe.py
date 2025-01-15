@@ -54,10 +54,18 @@ def create_checkout_session(plan_id: str, user_id: str):
                 }
             ],
             mode="payment",
-            success_url=os.getenv(
-                "STRIPE_SUCCESS_URL", "http://localhost:3000/success"
-            ),
-            cancel_url=os.getenv("STRIPE_CANCEL_URL", "http://localhost:3000/cancel"),
+            success_url=(
+                "http://localhost:3000"
+                if os.getenv("DEVELOPMENT_MODE") == "true"
+                else "https://www.styxlabs.co"
+            )
+            + "/pricing/success",
+            cancel_url=(
+                "http://localhost:3000"
+                if os.getenv("DEVELOPMENT_MODE") == "true"
+                else "https://www.styxlabs.co"
+            )
+            + "/pricing/cancel",
             metadata={
                 "user_id": user_id,
                 "plan_id": plan_id,
