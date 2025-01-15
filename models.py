@@ -78,3 +78,7 @@ class BulkLinkedInPayload(BaseModel):
 
 class GetEmailPayload(BaseModel):
     linkedin_profile_url: str
+
+
+class CheckoutSessionRequest(BaseModel):
+    planId: str

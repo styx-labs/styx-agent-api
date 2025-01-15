@@ -19,6 +19,7 @@ from models import (
     BulkLinkedInPayload,
     ReachoutPayload,
     GetEmailPayload,
+    CheckoutSessionRequest,
 )
 from dotenv import load_dotenv
 import os
@@ -27,6 +28,7 @@ from agents.evaluate_graph import run_search
 from services.helper_functions import get_key_traits, get_reachout_message
 from services.firebase_auth import verify_firebase_token
 from agents.candidate_processor import CandidateProcessor
+from services.stripe import create_checkout_session
 import logging
 import sys
 from fastapi.concurrency import run_in_threadpool
@@ -275,7 +277,9 @@ async def create_candidate(
     processor = CandidateProcessor(job_id, job_data, user_id)
     candidate_data = candidate.model_dump()
 
-    candidate_data = await run_in_threadpool(lambda: processor.get_candidate_record(candidate_data))
+    candidate_data = await run_in_threadpool(
+        lambda: processor.get_candidate_record(candidate_data)
+    )
     if not candidate_data:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -399,4 +403,18 @@ def get_search_credits(user_id: str = Depends(validate_user_id)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving search credits: {str(e)}",
+        )
+
+
+@app.post("/payments/create-checkout-session")
+def create_checkout_session_endpoint(
+    payload: CheckoutSessionRequest, user_id: str = Depends(validate_user_id)
+):
+    try:
+        checkout_url = create_checkout_session(payload.planId, user_id)
+        return {"url": checkout_url}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating checkout session: {str(e)}",
         )
