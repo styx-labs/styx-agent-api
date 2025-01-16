@@ -4,8 +4,6 @@ from fastapi import (
     status,
     Header,
     Depends,
-    File,
-    UploadFile,
     BackgroundTasks,
     Request,
 )
