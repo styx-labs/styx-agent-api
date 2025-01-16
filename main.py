@@ -5,6 +5,7 @@ from fastapi import (
     Header,
     Depends,
     BackgroundTasks,
+    Request,
 )
 from fastapi.middleware.cors import CORSMiddleware
 import services.firestore as firestore
@@ -17,6 +18,7 @@ from models import (
     BulkLinkedInPayload,
     ReachoutPayload,
     GetEmailPayload,
+    CheckoutSessionRequest,
 )
 from dotenv import load_dotenv
 import os
@@ -25,9 +27,11 @@ from agents.evaluate_graph import run_search
 from services.helper_functions import get_key_traits, get_reachout_message
 from services.firebase_auth import verify_firebase_token
 from agents.candidate_processor import CandidateProcessor
+from services.stripe import create_checkout_session
 import logging
 import sys
 from fastapi.concurrency import run_in_threadpool
+import stripe
 
 
 load_dotenv()
@@ -273,7 +277,9 @@ async def create_candidate(
     processor = CandidateProcessor(job_id, job_data, user_id)
     candidate_data = candidate.model_dump()
 
-    candidate_data = await run_in_threadpool(lambda: processor.get_candidate_record(candidate_data))
+    candidate_data = await run_in_threadpool(
+        lambda: processor.get_candidate_record(candidate_data)
+    )
     if not candidate_data:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -397,4 +403,77 @@ def get_search_credits(user_id: str = Depends(validate_user_id)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving search credits: {str(e)}",
+        )
+
+
+@app.post("/payments/create-checkout-session")
+def create_checkout_session_endpoint(
+    payload: CheckoutSessionRequest, user_id: str = Depends(validate_user_id)
+):
+    try:
+        checkout_url = create_checkout_session(payload.planId, user_id)
+        return {"url": checkout_url}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating checkout session: {str(e)}",
+        )
+
+
+@app.post("/webhook")
+async def stripe_webhook(request: Request):
+    try:
+        # Get the raw request body as bytes
+        payload = await request.body()
+        sig_header = request.headers.get("stripe-signature")
+
+        if not sig_header:
+            raise HTTPException(status_code=400, detail="No signature header")
+
+        try:
+            # Convert payload to string if it's bytes
+            if isinstance(payload, bytes):
+                payload_str = payload.decode("utf-8")
+            else:
+                payload_str = payload
+
+            event = stripe.Webhook.construct_event(
+                payload_str, sig_header, os.getenv("STRIPE_WEBHOOK_SECRET")
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid payload: {str(e)}")
+        except stripe.error.SignatureVerificationError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid signature: {str(e)}")
+
+        # Handle the event
+        if event["type"] == "checkout.session.completed":
+            session = event["data"]["object"]
+
+            # Get user ID and plan from metadata
+            user_id = session.get("metadata", {}).get("user_id")
+            plan_id = session.get("metadata", {}).get("plan_id")
+
+            if not user_id or not plan_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Missing user_id or plan_id in session metadata",
+                )
+
+            # Determine credits based on plan
+            credits_to_add = 100 if plan_id.lower() == "basic" else 500
+
+            # Add credits to user's account
+            new_total = firestore.add_search_credits(user_id, credits_to_add)
+
+            return {"status": "success", "new_credit_total": new_total}
+
+        return {"status": "success", "type": event["type"]}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error processing webhook: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing webhook: {str(e)}",
         )

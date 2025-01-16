@@ -7,6 +7,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 import sys
 from services.search_credits import free_searches
 from datetime import datetime, timedelta, UTC
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.azure_openai import get_azure_openai
 
@@ -132,19 +133,21 @@ def check_cached_candidate_exists(candidate_id: str):
     doc = candidate_ref.get()
     if not doc.exists:
         return False
-    
+
     candidate_data = doc.to_dict()
     updated_at = candidate_data.get("updated_at")
     if not updated_at:
         return False
-        
+
     # Create timezone-aware datetime for comparison
     one_month_ago = datetime.now(UTC) - timedelta(days=30)
     # Firestore timestamp should already be UTC-aware
     return updated_at > one_month_ago
 
 
-def add_candidate_to_job(job_id: str, candidate_id: str, user_id: str, candidate_data: dict):
+def add_candidate_to_job(
+    job_id: str, candidate_id: str, user_id: str, candidate_data: dict
+):
     """Add a candidate to a job"""
     job_ref = (
         db.collection("users")
@@ -195,32 +198,29 @@ def get_candidates(job_id: str, user_id: str) -> list:
         .collection("candidates")
         .stream()
     )
-    
+
     # Build a list of candidates with merged data
     all_candidates = []
     for job_candidate in candidates_ref:
         candidate_id = job_candidate.id
         job_specific_data = job_candidate.to_dict()
-        
+
         # Get base candidate data
         base_candidate = (
-            db.collection("candidates")
-            .document(candidate_id)
-            .get()
-            .to_dict()
+            db.collection("candidates").document(candidate_id).get().to_dict()
         )
-        
+
         if base_candidate:
             # Merge base candidate data with job-specific data
             # Job-specific data takes precedence
             merged_data = {**base_candidate, **job_specific_data}
-            merged_data['id'] = candidate_id
+            merged_data["id"] = candidate_id
             all_candidates.append(merged_data)
         else:
             # If no base candidate exists, just use job-specific data
-            job_specific_data['id'] = candidate_id
+            job_specific_data["id"] = candidate_id
             all_candidates.append(job_specific_data)
-    
+
     return all_candidates
 
 
@@ -287,3 +287,26 @@ def get_most_similar_jobs(query, num_jobs):
         limit=num_jobs,
     )
     return [doc.to_dict() for doc in query.stream()]
+
+
+def add_search_credits(user_id: str, credits: int) -> int:
+    """Add search credits to a user's account and return the new total
+
+    Args:
+        user_id: The ID of the user
+        credits: The number of credits to add
+
+    Returns:
+        The new total number of credits
+    """
+    doc_ref = db.collection("users").document(user_id)
+    doc = doc_ref.get()
+    user_dict = doc.to_dict() if doc.exists else {}
+
+    current_credits = user_dict.get("search_credits", 0)
+    new_total = current_credits + credits
+
+    user_dict["search_credits"] = new_total
+    doc_ref.set(user_dict)
+
+    return new_total
