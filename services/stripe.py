@@ -57,13 +57,13 @@ def create_checkout_session(plan_id: str, user_id: str):
             success_url=(
                 "http://localhost:3000"
                 if os.getenv("DEVELOPMENT_MODE") == "true"
-                else "https://www.styxlabs.co"
+                else "https://app.styxlabs.co"
             )
             + "/pricing/success",
             cancel_url=(
                 "http://localhost:3000"
                 if os.getenv("DEVELOPMENT_MODE") == "true"
-                else "https://www.styxlabs.co"
+                else "https://app.styxlabs.co"
             )
             + "/pricing/cancel",
             metadata={
