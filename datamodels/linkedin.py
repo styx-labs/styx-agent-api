@@ -8,7 +8,9 @@ from datetime import date
 
 
 class AILinkedinJobDescription(BaseModel):
-    job_description: str
+    role_summary: str
+    skills: List[str]
+    requirements: List[str]
     sources: List[str]
 
 

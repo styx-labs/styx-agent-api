@@ -44,7 +44,7 @@ class Candidate(BaseModel):
     profile: Optional[LinkedInProfile] = None
     public_identifier: str = None
     number_of_queries: int = 5
-    confidence_threshold: float = 0.8
+    confidence_threshold: float = 0.5
     updated_at: datetime = Field(default_factory=datetime.now)
 
 
