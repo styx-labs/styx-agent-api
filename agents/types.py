@@ -1,5 +1,5 @@
 """
-This file contains all the types for LLM calls and Langgraph state types.
+This file contains all the types for LLM calls and Langgraph state datamodels.
 """
 
 from typing import List, Annotated, Union
@@ -7,6 +7,7 @@ from typing_extensions import TypedDict
 import operator
 from pydantic import BaseModel, Field
 from models import KeyTrait
+from datamodels.linkedin import LinkedInProfile
 
 
 # All LLM output types
@@ -49,6 +50,7 @@ class EvaluationState(TypedDict):
     source_str: str
     job_description: str
     candidate_context: str
+    candidate_profile: LinkedInProfile
     candidate_full_name: str
     key_traits: List[str]
     number_of_queries: int
@@ -73,6 +75,7 @@ class EvaluationState(TypedDict):
 class EvaluationInputState(TypedDict):
     job_description: str
     candidate_context: str
+    candidate_profile: LinkedInProfile
     candidate_full_name: str
     key_traits: list[KeyTrait]
     number_of_queries: int
@@ -83,10 +86,12 @@ class CachedEvaluationInputState(TypedDict):
     source_str: str
     job_description: str
     candidate_context: str
+    candidate_profile: LinkedInProfile
     candidate_full_name: str
     key_traits: list[KeyTrait]
     citations: list[dict]
     source_str: str
+
 
 class EvaluationOutputState(TypedDict):
     citations: list[dict]
@@ -94,3 +99,4 @@ class EvaluationOutputState(TypedDict):
     summary: str
     overall_score: float
     source_str: str
+    candidate_profile: LinkedInProfile

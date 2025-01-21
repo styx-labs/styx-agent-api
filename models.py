@@ -2,6 +2,7 @@ from enum import Enum
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
+from datamodels.linkedin import LinkedInProfile
 
 
 class TraitType(str, Enum):
@@ -40,9 +41,10 @@ class Candidate(BaseModel):
     name: str = None
     context: str = None
     url: str
+    profile: Optional[LinkedInProfile] = None
     public_identifier: str = None
     number_of_queries: int = 5
-    confidence_threshold: float = 0.5
+    confidence_threshold: float = 0.8
     updated_at: datetime = Field(default_factory=datetime.now)
 
 

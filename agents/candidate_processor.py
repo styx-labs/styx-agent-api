@@ -41,17 +41,27 @@ class CandidateProcessor:
                 f"[MEMORY] Starting candidate processing - {self._get_memory_usage()}"
             )
 
-            firestore.add_candidate_to_job(self.job_id, candidate_data["public_identifier"], self.user_id, {"status": "processing", "name": candidate_data["name"]})
+            firestore.add_candidate_to_job(
+                self.job_id,
+                candidate_data["public_identifier"],
+                self.user_id,
+                {"status": "processing", "name": candidate_data["name"]},
+            )
 
             # Convert key_traits from dict to KeyTrait objects
             key_traits = [KeyTrait(**trait) for trait in self.job_data["key_traits"]]
 
-            if firestore.check_cached_candidate_exists(candidate_data["public_identifier"]):
-                cached_candidate = firestore.get_cached_candidate(candidate_data["public_identifier"])
+            if firestore.check_cached_candidate_exists(
+                candidate_data["public_identifier"]
+            ):
+                cached_candidate = firestore.get_cached_candidate(
+                    candidate_data["public_identifier"]
+                )
                 graph_result = await run_graph_cached(
                     self.job_data["job_description"],
                     candidate_data["context"],
                     candidate_data["name"],
+                    candidate_data["profile"],
                     key_traits,
                     cached_candidate["citations"],
                     cached_candidate["source_str"],
@@ -61,6 +71,7 @@ class CandidateProcessor:
                     self.job_data["job_description"],
                     candidate_data["context"],
                     candidate_data["name"],
+                    candidate_data["profile"],
                     key_traits,
                     candidate_data["number_of_queries"],
                     candidate_data["confidence_threshold"],
@@ -70,8 +81,10 @@ class CandidateProcessor:
                     {
                         "citations": graph_result["citations"],
                         "source_str": graph_result["source_str"],
+                        "profile": graph_result["candidate_profile"],
                     }
                 )
+
                 firestore.create_candidate(candidate_data)
 
             logging.info(f"[MEMORY] After graph search - {self._get_memory_usage()}")
@@ -82,9 +95,15 @@ class CandidateProcessor:
                 "summary": graph_result["summary"],
                 "overall_score": graph_result["overall_score"],
             }
-            firestore.add_candidate_to_job(self.job_id, candidate_data["public_identifier"], self.user_id, candidate_job_data)
+
+            firestore.add_candidate_to_job(
+                self.job_id,
+                candidate_data["public_identifier"],
+                self.user_id,
+                candidate_job_data,
+            )
             firestore.decrement_search_credits(self.user_id)
-            
+
             logging.info(
                 f"[MEMORY] Completed candidate processing - {self._get_memory_usage()}"
             )
@@ -106,32 +125,37 @@ class CandidateProcessor:
                 k in candidate_data and candidate_data[k]
                 for k in ["name", "context", "public_identifier"]
             ):
-                name, context, public_identifier = get_linkedin_context(
+                name, profile, public_identifier = get_linkedin_context(
                     candidate_data["url"]
                 )
                 candidate_data["name"] = name
-                candidate_data["context"] = context
+                candidate_data["profile"] = profile
+                candidate_data["context"] = profile.to_context_string()
                 candidate_data["public_identifier"] = public_identifier
-            return {
-                **self.default_settings,
-                **candidate_data,
-            }
+                return {
+                    **self.default_settings,
+                    **candidate_data,
+                }
         except Exception as e:
             print(f"Error processing LinkedIn URL {candidate_data['url']}: {str(e)}")
             return None
 
-    async def process_urls(self, urls: List[str]):
+    async def process_urls(self, urls: List[str]) -> None:
         """Process a list of LinkedIn URLs"""
         try:
             print(f"Processing {len(urls)} LinkedIn URLs")
             candidates = []
             for url in urls:
                 candidate_data = Candidate(url=url).model_dump()
-                candidate_data = await run_in_threadpool(lambda: self.get_candidate_record(candidate_data))
+                candidate_data = await run_in_threadpool(
+                    lambda: self.get_candidate_record(candidate_data)
+                )
                 if not candidate_data:
                     continue
                 candidates.append(candidate_data)
-            tasks = [self.process_single_candidate(candidate) for candidate in candidates]
+            tasks = [
+                self.process_single_candidate(candidate) for candidate in candidates
+            ]
             await asyncio.gather(*tasks)
         except Exception as e:
             print(str(e))
