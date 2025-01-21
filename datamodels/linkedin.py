@@ -23,13 +23,39 @@ class LinkedInExperience(BaseModel):
     location: Optional[str] = None
     summarized_job_description: Optional[AILinkedinJobDescription] = None
 
+    @classmethod
+    def from_dict(cls, data: dict):
+        return cls(
+            title=data["title"],
+            company=data["company"],
+            description=data["description"],
+            starts_at=data["starts_at"],
+            ends_at=data["ends_at"],
+            location=data["location"],
+            summarized_job_description=AILinkedinJobDescription.from_dict(
+                data["summarized_job_description"]
+            )
+            if data["summarized_job_description"]
+            else None,
+        )
+
 
 class LinkedInEducation(BaseModel):
-    school: Optional[str] = None
+    school: str
     degree_name: Optional[str] = None
     field_of_study: Optional[str] = None
     starts_at: Optional[date] = None
     ends_at: Optional[date] = None
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        return cls(
+            school=data["school"],
+            degree_name=data["degree_name"],
+            field_of_study=data["field_of_study"],
+            starts_at=data["starts_at"],
+            ends_at=data["ends_at"],
+        )
 
 
 class LinkedInProfile(BaseModel):
@@ -39,7 +65,7 @@ class LinkedInProfile(BaseModel):
     summary: Optional[str] = None
     city: Optional[str] = None
     country: Optional[str] = None
-    public_identifier: Optional[str] = None
+    public_identifier: str
     experiences: List[LinkedInExperience] = []
     education: List[LinkedInEducation] = []
 
@@ -70,6 +96,14 @@ class LinkedInProfile(BaseModel):
             if exp.ends_at:
                 context += f"End Year: {exp.ends_at.year}\n"
                 context += f"End Month: {exp.ends_at.month}\n"
+            if exp.summarized_job_description:
+                context += (
+                    f"Role Summary: {exp.summarized_job_description.role_summary}\n"
+                )
+                context += f"Skills: {exp.summarized_job_description.skills}\n"
+                context += (
+                    f"Requirements: {exp.summarized_job_description.requirements}\n"
+                )
             context += "\n---------\n"
 
         for edu in self.education:
@@ -84,6 +118,20 @@ class LinkedInProfile(BaseModel):
                 context += "\n---------\n"
 
         return context
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        return cls(
+            full_name=data["full_name"],
+            occupation=data["occupation"],
+            headline=data["headline"],
+            summary=data["summary"],
+            city=data["city"],
+            country=data["country"],
+            public_identifier=data["public_identifier"],
+            experiences=data["experiences"],
+            education=data["education"],
+        )
 
     @classmethod
     def from_dict(cls, data: dict) -> "LinkedInProfile":
