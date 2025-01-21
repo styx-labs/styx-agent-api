@@ -13,8 +13,6 @@ from models import (
     Job,
     JobDescription,
     Candidate,
-    HeadlessEvaluatePayload,
-    HeadlessReachoutPayload,
     BulkLinkedInPayload,
     ReachoutPayload,
     GetEmailPayload,
@@ -23,7 +21,6 @@ from models import (
 from dotenv import load_dotenv
 import os
 from services.proxycurl import get_linkedin_context, get_email
-from agents.evaluate_graph import run_search
 from services.helper_functions import get_key_traits, get_reachout_message
 from services.firebase_auth import verify_firebase_token
 from agents.candidate_processor import CandidateProcessor
@@ -82,74 +79,6 @@ async def validate_user_id(authorization: str = Header(None)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid authentication token: {str(e)}",
-        )
-
-
-@app.post("/evaluate-headless")
-async def evaluate_headless(
-    payload: HeadlessEvaluatePayload, user_id: str = Depends(validate_user_id)
-):
-    try:
-        candidate_data = payload.model_dump()
-        if candidate_data.get("url"):
-            try:
-                name, context = get_linkedin_context(candidate_data["url"])
-                candidate_data["name"] = name
-                candidate_data["context"] = context
-            except Exception as e:
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=f"Failed to fetch LinkedIn profile: {str(e)}",
-                )
-
-        if not candidate_data["job_description"]:
-            candidate_data["key_traits"] = [
-                "Technical Skills",
-                "Experience",
-                "Education",
-                "Entrepreneurship",
-            ]
-        else:
-            try:
-                candidate_data["key_traits"] = get_key_traits(
-                    candidate_data["job_description"]
-                ).key_traits
-            except Exception as e:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Error generating key traits: {str(e)}",
-                )
-
-        return await run_search(
-            job_description=candidate_data["job_description"],
-            candidate_context=candidate_data["context"],
-            candidate_full_name=candidate_data["name"],
-            key_traits=candidate_data["key_traits"],
-            number_of_queries=candidate_data["number_of_queries"],
-            confidence_threshold=candidate_data["confidence_threshold"],
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing evaluation: {str(e)}",
-        )
-
-
-@app.post("/generate-reachout-headless")
-async def generate_reachout_headless(
-    payload: HeadlessReachoutPayload, user_id: str = Depends(validate_user_id)
-):
-    try:
-        return get_reachout_message(
-            name=payload.name,
-            job_description=payload.job_description,
-            sections=payload.sections,
-            citations=payload.citations,
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error generating reachout message: {str(e)}",
         )
 
 
@@ -367,10 +296,11 @@ def get_job(job_id: str, user_id: str = Depends(validate_user_id)):
 @app.post("/get_linkedin_context")
 def get_linkedin_context_request(url: str, user_id: str = Depends(validate_user_id)):
     try:
-        name, context, public_identifier = get_linkedin_context(url)
+        name, profile, public_identifier = get_linkedin_context(url)
         return {
             "name": name,
-            "context": context,
+            "context": profile.to_context_string(),
+            "profile": profile,
             "public_identifier": public_identifier,
         }
     except Exception as e:
