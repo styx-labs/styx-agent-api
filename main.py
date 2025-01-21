@@ -21,7 +21,11 @@ from models import (
 from dotenv import load_dotenv
 import os
 from services.proxycurl import get_linkedin_context, get_email
-from services.helper_functions import get_key_traits, get_reachout_message
+from services.helper_functions import (
+    get_key_traits,
+    get_reachout_message,
+    get_list_of_profiles,
+)
 from services.firebase_auth import verify_firebase_token
 from agents.candidate_processor import CandidateProcessor
 from services.stripe import create_checkout_session
@@ -87,8 +91,13 @@ def get_key_traits_request(
     job_description: JobDescription, user_id: str = Depends(validate_user_id)
 ):
     try:
-        return get_key_traits(job_description.description)
+        ideal_profiles = get_list_of_profiles(job_description.ideal_profile_urls)
+        key_traits_output = get_key_traits(job_description.description, ideal_profiles)
+        key_traits_output = key_traits_output.model_dump()
+        key_traits_output["ideal_profiles"] = ideal_profiles
+        return key_traits_output
     except Exception as e:
+        print(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating key traits: {str(e)}",
