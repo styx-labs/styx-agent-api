@@ -7,7 +7,7 @@ from agents.prompts import (
     reachout_message_prompt_linkedin,
     reachout_message_prompt_email,
 )
-from services.proxycurl import get_linkedin_context
+from services.proxycurl import get_linkedin_profile
 
 
 @traceable(name="get_list_of_profiles")
@@ -15,8 +15,8 @@ def get_list_of_profiles(ideal_profile_urls: list[str]) -> list[str]:
     if ideal_profile_urls:
         ideal_profiles = []
         for url in ideal_profile_urls:
-            _, context, _ = get_linkedin_context(url)
-            ideal_profiles.append(context)
+            _, profile, _ = get_linkedin_profile(url)
+            ideal_profiles.append(profile.to_context_string())
         return ideal_profiles
     return []
 
@@ -28,7 +28,7 @@ def get_key_traits(
     if ideal_profiles:
         ideal_profiles_str = ""
         for profile in ideal_profiles:
-            ideal_profiles_str += profile.to_context_string()
+            ideal_profiles_str += profile
             ideal_profiles_str += "\n---------\n---------\n"
     else:
         ideal_profiles_str = ""

@@ -1,7 +1,7 @@
 from typing import List
 import asyncio
 from fastapi import HTTPException, status
-from services.proxycurl import get_linkedin_context
+from services.proxycurl import get_linkedin_profile
 import services.firestore as firestore
 from models import KeyTrait, Candidate
 import psutil
@@ -125,7 +125,7 @@ class CandidateProcessor:
                 k in candidate_data and candidate_data[k]
                 for k in ["name", "context", "public_identifier"]
             ):
-                name, profile, public_identifier = get_linkedin_context(
+                name, profile, public_identifier = get_linkedin_profile(
                     candidate_data["url"]
                 )
                 candidate_data["name"] = name

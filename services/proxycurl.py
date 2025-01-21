@@ -14,7 +14,7 @@ def convert_date_dict(date_dict: dict) -> date:
     return date(year=date_dict["year"], month=date_dict["month"], day=date_dict["day"])
 
 
-def get_linkedin_context(url):
+def get_linkedin_profile(url):
     api_key = os.getenv("PROXYCURL_API_KEY")
     headers = {"Authorization": "Bearer " + api_key}
     api_endpoint = "https://nubela.co/proxycurl/api/v2/linkedin"
