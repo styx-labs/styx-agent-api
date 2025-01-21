@@ -20,8 +20,12 @@ from models import (
 )
 from dotenv import load_dotenv
 import os
-from services.proxycurl import get_linkedin_context, get_email
-from services.helper_functions import get_key_traits, get_reachout_message, get_list_of_profiles
+from services.proxycurl import get_linkedin_profile, get_email
+from services.helper_functions import (
+    get_key_traits,
+    get_reachout_message,
+    get_list_of_profiles,
+)
 from services.firebase_auth import verify_firebase_token
 from agents.candidate_processor import CandidateProcessor
 from services.stripe import create_checkout_session
@@ -88,9 +92,7 @@ def get_key_traits_request(
 ):
     try:
         ideal_profiles = get_list_of_profiles(job_description.ideal_profile_urls)
-        key_traits_output = get_key_traits(
-            job_description.description, ideal_profiles
-        )
+        key_traits_output = get_key_traits(job_description.description, ideal_profiles)
         key_traits_output = key_traits_output.model_dump()
         key_traits_output["ideal_profiles"] = ideal_profiles
         return key_traits_output
@@ -303,10 +305,11 @@ def get_job(job_id: str, user_id: str = Depends(validate_user_id)):
 @app.post("/get_linkedin_context")
 def get_linkedin_context_request(url: str, user_id: str = Depends(validate_user_id)):
     try:
-        name, context, public_identifier = get_linkedin_context(url)
+        name, profile, public_identifier = get_linkedin_profile(url)
         return {
             "name": name,
-            "context": context,
+            "context": profile.to_context_string(),
+            "profile": profile,
             "public_identifier": public_identifier,
         }
     except Exception as e:

@@ -1,66 +1,63 @@
 import requests
 import os
 import dotenv
-import re
-
+from datamodels.linkedin import LinkedInProfile, LinkedInExperience, LinkedInEducation
+from datetime import date
 
 dotenv.load_dotenv()
 
 
-def get_linkedin_context(url):
+def convert_date_dict(date_dict: dict) -> date:
+    """Convert a date dictionary from Proxycurl API to a Python date object."""
+    if not date_dict or not all(k in date_dict for k in ["year", "month", "day"]):
+        return None
+    return date(year=date_dict["year"], month=date_dict["month"], day=date_dict["day"])
+
+
+def get_linkedin_profile(url):
     api_key = os.getenv("PROXYCURL_API_KEY")
     headers = {"Authorization": "Bearer " + api_key}
     api_endpoint = "https://nubela.co/proxycurl/api/v2/linkedin"
     params = {"linkedin_profile_url": url}
     response = requests.get(api_endpoint, params=params, headers=headers)
-    response = response.json()
-    name = re.sub(r'[^\x00-\x7F]+', '', response["full_name"])
-    context = ""
-    if "occupation" in response:
-        context += f"Currect Occuptation: {response['occupation']}\n"
-        context += "\n---------\n"
-    if "headline" in response:
-        context += f"Headline: {response['headline']}\n"
-        context += "\n---------\n"
-    if "summary" in response:
-        context += f"Summary: {response['summary']}\n"
-        context += "\n---------\n"
-    if "city" and "country" in response:
-        context += f"Location of this candidate: {response['city']}, {response['country']}\n"
-        context += "\n---------\n"
-    if "experiences" in response:
-        for e in response["experiences"]:
-            if "title" in e and "company" in e:
-                context += f"Experience: {e['title']} at {e['company']}\n"
-                if "description" in e:
-                    context += f"Description: {e['description']}\n"
-                if e["starts_at"]:
-                    if "year" in e["starts_at"]:
-                        context += f"Start Year: {e['starts_at']['year']}\n"
-                    if "month" in e["starts_at"]:
-                        context += f"Start Month: {e['starts_at']['month']}\n"
-                if e["ends_at"]:
-                    if "year" in e["ends_at"]:
-                        context += f"End Year: {e['ends_at']['year']}\n"
-                    if "month" in e["ends_at"]:
-                        context += f"End Month: {e['ends_at']['month']}\n"
-                context += "\n---------\n"
-    if "education" in response:
-        for e in response["education"]:
-            if "school" in e and "degree_name" in e and "field_of_study" in e:
-                context += f"Education: {e['school']}; {e['degree_name']} in {e['field_of_study']}\n"
-                if e["starts_at"]:
-                    if "year" in e["starts_at"]:
-                        context += f"Start Year: {e['starts_at']['year']}\n"
-                    if "month" in e["starts_at"]:
-                        context += f"Start Month: {e['starts_at']['month']}\n"
-                if e["ends_at"]:
-                    if "year" in e["ends_at"]:  
-                        context += f"End Year: {e['ends_at']['year']}\n"
-                    if "month" in e["ends_at"]:
-                        context += f"End Month: {e['ends_at']['month']}\n"
-                context += "\n---------\n"
-    return name, context, response["public_identifier"]
+    data = response.json()
+
+    # Convert the raw response into our structured model
+    profile = LinkedInProfile(
+        full_name=data["full_name"],
+        occupation=data.get("occupation"),
+        headline=data.get("headline"),
+        summary=data.get("summary"),
+        city=data.get("city"),
+        country=data.get("country"),
+        public_identifier=data["public_identifier"],
+        experiences=[
+            LinkedInExperience(
+                title=exp["title"],
+                company=exp["company"],
+                description=exp.get("description"),
+                starts_at=convert_date_dict(exp.get("starts_at")),
+                ends_at=convert_date_dict(exp.get("ends_at")),
+                location=exp.get("location"),
+            )
+            for exp in data.get("experiences", [])
+            if "title" in exp and "company" in exp
+        ],
+        education=[
+            LinkedInEducation(
+                school=edu["school"],
+                degree_name=edu["degree_name"],
+                field_of_study=edu["field_of_study"],
+                starts_at=convert_date_dict(edu.get("starts_at")),
+                ends_at=convert_date_dict(edu.get("ends_at")),
+            )
+            for edu in data.get("education", [])
+            if all(k in edu for k in ["school", "degree_name", "field_of_study"])
+        ],
+    )
+
+    return profile.full_name, profile, profile.public_identifier
+
 
 def get_email(linkedin_profile_url: str):
     api_key = os.getenv("PROXYCURL_API_KEY")
