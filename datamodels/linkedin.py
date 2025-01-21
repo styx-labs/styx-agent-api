@@ -132,7 +132,3 @@ class LinkedInProfile(BaseModel):
             experiences=data["experiences"],
             education=data["education"],
         )
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "LinkedInProfile":
-        return cls(**data)

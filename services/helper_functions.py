@@ -2,7 +2,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from services.azure_openai import llm
 from langsmith import traceable
 from agents.types import KeyTraitsOutput
-from agents.prompts import key_traits_prompt, reachout_message_prompt_linkedin, reachout_message_prompt_email
+from agents.prompts import (
+    key_traits_prompt,
+    reachout_message_prompt_linkedin,
+    reachout_message_prompt_email,
+)
 from services.proxycurl import get_linkedin_context
 
 
@@ -18,11 +22,13 @@ def get_list_of_profiles(ideal_profile_urls: list[str]) -> list[str]:
 
 
 @traceable(name="get_key_traits")
-def get_key_traits(job_description: str, ideal_profiles: list[str]) -> tuple[KeyTraitsOutput, list[str]]:
+def get_key_traits(
+    job_description: str, ideal_profiles: list[str]
+) -> tuple[KeyTraitsOutput, list[str]]:
     if ideal_profiles:
         ideal_profiles_str = ""
         for profile in ideal_profiles:
-            ideal_profiles_str += profile 
+            ideal_profiles_str += profile.to_context_string()
             ideal_profiles_str += "\n---------\n---------\n"
     else:
         ideal_profiles_str = ""
