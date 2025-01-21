@@ -19,14 +19,14 @@ class TraitType(str, Enum):
 class KeyTrait(BaseModel):
     trait: str
     description: str
-    trait_type: TraitType
-    value_type: Optional[str] = None
+    trait_type: Optional[TraitType] = TraitType.BOOLEAN
     required: bool = True
 
 
 class Job(BaseModel):
     job_description: str
     key_traits: List[KeyTrait]
+    ideal_profiles: List[str] = None
     job_title: str
     company_name: str
     created_at: datetime = Field(default_factory=datetime.now)
@@ -34,6 +34,7 @@ class Job(BaseModel):
 
 class JobDescription(BaseModel):
     description: str
+    ideal_profile_urls: List[str] = None
 
 
 class Candidate(BaseModel):
