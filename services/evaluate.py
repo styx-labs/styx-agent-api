@@ -1,11 +1,18 @@
 from langserve import RemoteRunnable
-from agents.types import EvaluationInputState, EvaluationOutputState, CachedEvaluationInputState
+from agents.types import (
+    EvaluationInputState,
+    EvaluationOutputState,
+    CachedEvaluationInputState,
+)
 import os
+from datamodels.linkedin import LinkedInProfile
+
 
 async def run_graph(
     job_description: str,
     candidate_context: str,
     candidate_full_name: str,
+    profile: LinkedInProfile,
     key_traits: list[dict],
     number_of_queries: int,
     confidence_threshold: float,
@@ -15,6 +22,7 @@ async def run_graph(
         EvaluationInputState(
             job_description=job_description,
             candidate_context=candidate_context,
+            candidate_profile=profile,
             candidate_full_name=candidate_full_name,
             key_traits=key_traits,
             number_of_queries=number_of_queries,
@@ -27,6 +35,7 @@ async def run_graph_cached(
     job_description: str,
     candidate_context: str,
     candidate_full_name: str,
+    profile: LinkedInProfile,
     key_traits: list[dict],
     citations: list[dict],
     source_str: str,
@@ -36,6 +45,7 @@ async def run_graph_cached(
         CachedEvaluationInputState(
             job_description=job_description,
             candidate_context=candidate_context,
+            candidate_profile=profile,
             candidate_full_name=candidate_full_name,
             key_traits=key_traits,
             citations=citations,

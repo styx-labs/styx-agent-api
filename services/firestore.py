@@ -3,7 +3,6 @@ import os
 import dotenv
 from google.cloud.firestore_v1.vector import Vector
 from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
-from google.cloud.firestore_v1.base_query import FieldFilter
 import sys
 from services.search_credits import free_searches
 from datetime import datetime, timedelta, UTC
