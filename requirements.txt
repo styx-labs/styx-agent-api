@@ -19,4 +19,3 @@ openai==1.58.1
 stripe==7.14.0
 langserve
 google-cloud-secret-manager
-google-crc32c
