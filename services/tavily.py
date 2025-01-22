@@ -1,9 +1,12 @@
 from tavily import AsyncTavilyClient
 import asyncio
 from langsmith import traceable
+from services.get_secret import get_secret
 
 
-tavily_async_client = AsyncTavilyClient()
+tavily_async_client = AsyncTavilyClient(
+    api_key=get_secret("tavily-api-key", "1"),
+)
 
 @traceable(name="tavily_search_async")
 async def tavily_search_async(search_queries):

@@ -1,10 +1,7 @@
 import requests
-import os
-import dotenv
 from datamodels.linkedin import LinkedInProfile, LinkedInExperience, LinkedInEducation
 from datetime import date
-
-dotenv.load_dotenv()
+from services.get_secret import get_secret
 
 
 def convert_date_dict(date_dict: dict) -> date:
@@ -15,7 +12,7 @@ def convert_date_dict(date_dict: dict) -> date:
 
 
 def get_linkedin_profile(url):
-    api_key = os.getenv("PROXYCURL_API_KEY")
+    api_key = get_secret("proxycurl-api-key", "1")
     headers = {"Authorization": "Bearer " + api_key}
     api_endpoint = "https://nubela.co/proxycurl/api/v2/linkedin"
     params = {"linkedin_profile_url": url}
@@ -60,7 +57,7 @@ def get_linkedin_profile(url):
 
 
 def get_email(linkedin_profile_url: str):
-    api_key = os.getenv("PROXYCURL_API_KEY")
+    api_key = get_secret("proxycurl-api-key", "1")
     headers = {"Authorization": "Bearer " + api_key}
     api_endpoint = "https://nubela.co/proxycurl/api/contact-api/personal-email"
     params = {

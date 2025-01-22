@@ -1,10 +1,11 @@
 import stripe
-from dotenv import load_dotenv
+from services.get_secret import get_secret
 import os
+from dotenv import load_dotenv
 
 load_dotenv()
 
-stripe.api_key = os.getenv("STRIPE_API_KEY")
+stripe.api_key = get_secret("stripe-api-key", "1")
 
 # First create products for each tier
 basic_product = stripe.Product.create(
