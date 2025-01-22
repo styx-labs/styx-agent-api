@@ -1,11 +1,15 @@
 import google_crc32c
 from google.cloud import secretmanager
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 
-def get_secret(project_id: str, secret_id: str, version_id: str):
+def get_secret(secret_id: str, version_id: str):
     client = secretmanager.SecretManagerServiceClient()
     crc32c = google_crc32c.Checksum()
-    name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
+    name = f"projects/{os.getenv('PROJECT_ID')}/secrets/{secret_id}/versions/{version_id}"
 
     response = client.access_secret_version(request={"name": name})
 

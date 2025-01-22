@@ -19,7 +19,7 @@ from models import (
     CheckoutSessionRequest,
 )
 from dotenv import load_dotenv
-import os
+from services.get_secret import get_secret
 from services.proxycurl import get_linkedin_context, get_email
 from services.helper_functions import get_key_traits, get_reachout_message, get_list_of_profiles
 from services.firebase_auth import verify_firebase_token
@@ -374,7 +374,7 @@ async def stripe_webhook(request: Request):
                 payload_str = payload
 
             event = stripe.Webhook.construct_event(
-                payload_str, sig_header, os.getenv("STRIPE_WEBHOOK_SECRET")
+                payload_str, sig_header, get_secret("stripe-webhook-secret", "1")
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid payload: {str(e)}")

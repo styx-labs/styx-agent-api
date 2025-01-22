@@ -1,22 +1,21 @@
 from typing import Optional
 from openai import AzureOpenAI
-import os
-from dotenv import load_dotenv
 from langchain_openai import AzureChatOpenAI
+from services.get_secret import get_secret
 
-
-load_dotenv()
 
 llm = AzureChatOpenAI(
-    azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT"),
-    api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+    deployment_name="gpt-4o-mini",
+    openai_api_version="2023-03-15-preview",
+    azure_endpoint=get_secret("azure-openai-endpoint", "1"),
+    openai_api_key=get_secret("azure-openai-api-key", "1"),
     temperature=0,
 )
 
 
 def get_azure_openai() -> Optional[AzureOpenAI]:
     return AzureOpenAI(
-        api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
-        azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+        api_key=get_secret("azure-openai-api-key", "1"),
+        api_version="2023-03-15-preview",
+        azure_endpoint=get_secret("azure-openai-endpoint", "1"),
     )

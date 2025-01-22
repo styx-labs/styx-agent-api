@@ -1,14 +1,10 @@
 import requests
-import os
-import dotenv
 import re
-
-
-dotenv.load_dotenv()
+from services.get_secret import get_secret
 
 
 def get_linkedin_context(url):
-    api_key = os.getenv("PROXYCURL_API_KEY")
+    api_key = get_secret("proxycurl-api-key", "1")
     headers = {"Authorization": "Bearer " + api_key}
     api_endpoint = "https://nubela.co/proxycurl/api/v2/linkedin"
     params = {"linkedin_profile_url": url}
@@ -63,7 +59,7 @@ def get_linkedin_context(url):
     return name, context, response["public_identifier"]
 
 def get_email(linkedin_profile_url: str):
-    api_key = os.getenv("PROXYCURL_API_KEY")
+    api_key = get_secret("proxycurl-api-key", "1")
     headers = {"Authorization": "Bearer " + api_key}
     api_endpoint = "https://nubela.co/proxycurl/api/contact-api/personal-email"
     params = {
