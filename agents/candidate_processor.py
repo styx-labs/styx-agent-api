@@ -98,6 +98,9 @@ class CandidateProcessor:
                 "sections": graph_result["sections"],
                 "summary": graph_result["summary"],
                 "overall_score": graph_result["overall_score"],
+                "search_mode": candidate_data.get(
+                    "search_mode", True
+                ),  # Add search mode to response
             }
 
             firestore.add_candidate_to_job(
