@@ -19,6 +19,7 @@ class CandidateProcessor:
         self.default_settings = {
             "number_of_queries": 5,
             "confidence_threshold": 0.5,
+            "search_mode": True,  # Default to search mode enabled
         }
         logging.info(
             f"[MEMORY] Initializing CandidateProcessor - {self._get_memory_usage()}"
@@ -54,6 +55,7 @@ class CandidateProcessor:
             if firestore.check_cached_candidate_exists(
                 candidate_data["public_identifier"]
             ):
+                # Always try to use cached data first
                 cached_candidate = firestore.get_cached_candidate(
                     candidate_data["public_identifier"]
                 )
@@ -67,6 +69,7 @@ class CandidateProcessor:
                     cached_candidate["source_str"],
                 )
             else:
+                # If no cache, decide between search or LinkedIn-only mode
                 graph_result = await run_graph(
                     self.job_data["job_description"],
                     candidate_data["context"],
@@ -75,8 +78,10 @@ class CandidateProcessor:
                     key_traits,
                     candidate_data["number_of_queries"],
                     candidate_data["confidence_threshold"],
+                    search_mode=candidate_data.get("search_mode", True),
                 )
 
+                # Always update candidate data and create in Firestore
                 candidate_data.update(
                     {
                         "citations": graph_result["citations"],
@@ -84,7 +89,6 @@ class CandidateProcessor:
                         "profile": graph_result["candidate_profile"],
                     }
                 )
-
                 firestore.create_candidate(candidate_data)
 
             logging.info(f"[MEMORY] After graph search - {self._get_memory_usage()}")
@@ -140,13 +144,15 @@ class CandidateProcessor:
             print(f"Error processing LinkedIn URL {candidate_data['url']}: {str(e)}")
             return None
 
-    async def process_urls(self, urls: List[str]) -> None:
+    async def process_urls(self, urls: List[str], search_mode: bool = True) -> None:
         """Process a list of LinkedIn URLs"""
         try:
             print(f"Processing {len(urls)} LinkedIn URLs")
             candidates = []
             for url in urls:
-                candidate_data = Candidate(url=url).model_dump()
+                candidate_data = Candidate(
+                    url=url, search_mode=search_mode
+                ).model_dump()
                 candidate_data = await run_in_threadpool(
                     lambda: self.get_candidate_record(candidate_data)
                 )
