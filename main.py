@@ -213,18 +213,9 @@ async def create_candidate(
         )
 
     processor = CandidateProcessor(job_id, job_data, user_id)
-    candidate_data = candidate.model_dump()
-
-    candidate_data = await run_in_threadpool(
-        lambda: processor.get_candidate_record(candidate_data)
+    background_tasks.add_task(
+        processor.process_single_candidate, candidate.model_dump()
     )
-    if not candidate_data:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch LinkedIn profile",
-        )
-
-    background_tasks.add_task(processor.process_single_candidate, candidate_data)
 
     return {"message": "Candidate processing started"}
 
@@ -253,9 +244,7 @@ async def create_candidates_bulk(
 
         processor = CandidateProcessor(job_id, job, user_id)
         background_tasks.add_task(
-            processor.process_urls,
-            payload.urls,
-            search_mode=payload.search_mode
+            processor.process_urls, payload.urls, search_mode=payload.search_mode
         )
         return {"message": "Processing started"}
     except Exception as e:
