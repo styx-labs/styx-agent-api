@@ -9,6 +9,7 @@ ENV DB=unilink-agent-db-prod
 ENV PEOPLE_DB=people-db-prod
 ENV EVAL_ENDPOINT=https://styx-evaluate-16250094868.us-central1.run.app/evaluate
 ENV SEARCH_ENDPOINT=https://styx-search-16250094868.us-central1.run.app/search
+ENV PROJECT_ID=16250094868
 
 ENV PORT=8080
 EXPOSE ${PORT}
