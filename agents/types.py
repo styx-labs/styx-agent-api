@@ -30,6 +30,7 @@ class EvaluationInputState(TypedDict):
     key_traits: list[KeyTrait]
     number_of_queries: int
     confidence_threshold: float
+    ideal_profiles: list[str]
 
 
 class CachedEvaluationInputState(TypedDict):
@@ -41,6 +42,7 @@ class CachedEvaluationInputState(TypedDict):
     key_traits: list[KeyTrait]
     citations: list[dict]
     source_str: str
+    ideal_profiles: list[str]
 
 
 class EvaluationOutputState(TypedDict):
@@ -50,3 +52,4 @@ class EvaluationOutputState(TypedDict):
     overall_score: float
     source_str: str
     candidate_profile: LinkedInProfile
+    fit: dict

@@ -16,6 +16,7 @@ async def run_graph(
     key_traits: list[dict],
     number_of_queries: int,
     confidence_threshold: float,
+    ideal_profiles: list[str],
 ) -> EvaluationOutputState:
     remote_graph = RemoteRunnable(os.getenv("SEARCH_ENDPOINT"))
     return await remote_graph.ainvoke(
@@ -27,6 +28,7 @@ async def run_graph(
             key_traits=key_traits,
             number_of_queries=number_of_queries,
             confidence_threshold=confidence_threshold,
+            ideal_profiles=ideal_profiles,
         )
     )
 
@@ -39,6 +41,7 @@ async def run_graph_cached(
     key_traits: list[dict],
     citations: list[dict],
     source_str: str,
+    ideal_profiles: list[str],
 ) -> EvaluationOutputState:
     remote_graph = RemoteRunnable(os.getenv("EVAL_ENDPOINT"))
     return await remote_graph.ainvoke(
@@ -50,5 +53,6 @@ async def run_graph_cached(
             key_traits=key_traits,
             citations=citations,
             source_str=source_str,
+            ideal_profiles=ideal_profiles,
         )
     )

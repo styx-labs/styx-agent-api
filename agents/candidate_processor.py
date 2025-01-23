@@ -65,6 +65,7 @@ class CandidateProcessor:
                     key_traits,
                     cached_candidate["citations"],
                     cached_candidate["source_str"],
+                    self.job_data["ideal_profiles"],
                 )
             else:
                 graph_result = await run_graph(
@@ -75,6 +76,7 @@ class CandidateProcessor:
                     key_traits,
                     candidate_data["number_of_queries"],
                     candidate_data["confidence_threshold"],
+                    self.job_data["ideal_profiles"],
                 )
 
                 candidate_data.update(
@@ -94,6 +96,7 @@ class CandidateProcessor:
                 "sections": graph_result["sections"],
                 "summary": graph_result["summary"],
                 "overall_score": graph_result["overall_score"],
+                "fit": graph_result["fit"],
             }
 
             firestore.add_candidate_to_job(
