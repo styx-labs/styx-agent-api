@@ -213,18 +213,9 @@ async def create_candidate(
         )
 
     processor = CandidateProcessor(job_id, job_data, user_id)
-    candidate_data = candidate.model_dump()
-
-    candidate_data = await run_in_threadpool(
-        lambda: processor.get_candidate_record(candidate_data)
+    background_tasks.add_task(
+        processor.process_single_candidate, candidate.model_dump()
     )
-    if not candidate_data:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch LinkedIn profile",
-        )
-
-    background_tasks.add_task(processor.process_single_candidate, candidate_data)
 
     return {"message": "Candidate processing started"}
 
@@ -236,26 +227,32 @@ async def create_candidates_bulk(
     payload: BulkLinkedInPayload,
     user_id: str = Depends(validate_user_id),
 ):
-    search_credits = firestore.get_search_credits(user_id)
-    required_credits = len(payload.urls)
+    try:
+        search_credits = firestore.get_search_credits(user_id)
+        if search_credits < len(payload.urls):
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=f"Insufficient search credits. Required: {len(payload.urls)}, Available: {search_credits}",
+            )
 
-    if search_credits < required_credits:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=f"Insufficient search credits. You have {search_credits} credits but need {required_credits} credits to process all URLs.",
+        job = firestore.get_job(job_id, user_id)
+        if not job:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job with id {job_id} not found",
+            )
+
+        processor = CandidateProcessor(job_id, job, user_id)
+        background_tasks.add_task(
+            processor.process_urls, payload.urls, search_mode=payload.search_mode
         )
-
-    job_data = firestore.get_job(job_id, user_id)
-    if not job_data:
+        return {"message": "Processing started"}
+    except Exception as e:
+        print(e)
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Job with id {job_id} not found",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing bulk candidates: {str(e)}",
         )
-
-    processor = CandidateProcessor(job_id, job_data, user_id)
-
-    background_tasks.add_task(processor.process_urls, payload.urls)
-    return {"message": "Candidates processing started"}
 
 
 @app.get("/jobs/{job_id}/candidates")

@@ -46,6 +46,7 @@ class Candidate(BaseModel):
     public_identifier: str = None
     number_of_queries: int = 5
     confidence_threshold: float = 0.5
+    search_mode: bool = True  # Controls whether to use search or LinkedIn-only mode
     updated_at: datetime = Field(default_factory=datetime.now)
 
 
@@ -77,6 +78,7 @@ class ParaformEvaluateGraphLinkedinPayload(BaseModel):
 
 class BulkLinkedInPayload(BaseModel):
     urls: List[str]
+    search_mode: bool = True  # Controls whether to use search or LinkedIn-only mode
 
 
 class GetEmailPayload(BaseModel):

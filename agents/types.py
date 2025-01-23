@@ -30,6 +30,7 @@ class EvaluationInputState(TypedDict):
     key_traits: list[KeyTrait]
     number_of_queries: int
     confidence_threshold: float
+    search_mode: bool = True  # Controls whether to perform search or use LinkedIn-only mode
 
 
 class CachedEvaluationInputState(TypedDict):
