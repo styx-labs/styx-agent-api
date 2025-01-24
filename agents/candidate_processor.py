@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict, Optional
 import asyncio
 from fastapi import HTTPException, status
 from services.proxycurl import get_linkedin_profile
@@ -8,7 +8,8 @@ import psutil
 import logging
 from datetime import datetime
 from fastapi.concurrency import run_in_threadpool
-from services.evaluate import run_graph, run_graph_cached
+from services.evaluate import run_graph
+import re
 
 
 class CandidateProcessor:
@@ -19,6 +20,7 @@ class CandidateProcessor:
         self.default_settings = {
             "number_of_queries": 5,
             "confidence_threshold": 0.5,
+            "search_mode": True,  # Default to search mode enabled
         }
         logging.info(
             f"[MEMORY] Initializing CandidateProcessor - {self._get_memory_usage()}"
@@ -34,7 +36,20 @@ class CandidateProcessor:
             f"VMS: {memory_info.vms / 1024 / 1024:.2f}MB"
         )
 
-    async def process_single_candidate(self, candidate_data: dict) -> None:
+    def _extract_linkedin_id(self, url: str) -> Optional[str]:
+        """Extract the LinkedIn public identifier from a profile URL."""
+        try:
+            # Remove any query parameters
+            url = url.split("?")[0]
+            # Remove trailing slash if present
+            url = url.rstrip("/")
+            # Get the last part of the URL which should be the ID
+            match = re.search(r"linkedin\.com/in/([^/]+)", url)
+            return match.group(1) if match else None
+        except Exception:
+            return None
+
+    async def process_single_candidate(self, candidate_data: Dict) -> None:
         """Process a single candidate with evaluation"""
         try:
             logging.info(
@@ -51,43 +66,45 @@ class CandidateProcessor:
             # Convert key_traits from dict to KeyTrait objects
             key_traits = [KeyTrait(**trait) for trait in self.job_data["key_traits"]]
 
-            if firestore.check_cached_candidate_exists(
-                candidate_data["public_identifier"]
-            ):
-                cached_candidate = firestore.get_cached_candidate(
-                    candidate_data["public_identifier"]
-                )
-                graph_result = await run_graph_cached(
-                    self.job_data["job_description"],
-                    candidate_data["context"],
-                    candidate_data["name"],
-                    candidate_data["profile"],
-                    key_traits,
-                    cached_candidate["citations"],
-                    cached_candidate["source_str"],
-                    self.job_data["ideal_profiles"],
-                )
-            else:
-                graph_result = await run_graph(
-                    self.job_data["job_description"],
-                    candidate_data["context"],
-                    candidate_data["name"],
-                    candidate_data["profile"],
-                    key_traits,
-                    candidate_data["number_of_queries"],
-                    candidate_data["confidence_threshold"],
-                    self.job_data["ideal_profiles"],
+            if not candidate_data:
+                raise ValueError(
+                    f"Could not fetch LinkedIn profile for {candidate_data['url']}"
                 )
 
-                candidate_data.update(
-                    {
-                        "citations": graph_result["citations"],
-                        "source_str": graph_result["source_str"],
-                        "profile": graph_result["candidate_profile"],
-                    }
-                )
+            # Run evaluation with all the necessary data
+            graph_result = await run_graph(
+                job_description=self.job_data["job_description"],
+                candidate_context=candidate_data["context"],
+                candidate_full_name=candidate_data["name"],
+                profile=candidate_data["profile"],
+                key_traits=key_traits,
+                ideal_profiles=self.job_data["ideal_profiles"],
+                number_of_queries=candidate_data.get("number_of_queries", 0),
+                confidence_threshold=candidate_data.get("confidence_threshold", 0.0),
+                search_mode=candidate_data.get("search_mode", True),
+                cached=candidate_data.get("cached", False),
+                citations=candidate_data.get("citations"),
+                source_str=candidate_data.get("source_str"),
+            )
 
-                firestore.create_candidate(candidate_data)
+            # Always update candidate data and create in Firestore
+            update_data = {"profile": graph_result["candidate_profile"]}
+            
+            if candidate_data.get("search_mode", True):
+                # In search mode, update citations and source_str from graph result
+                update_data.update({
+                    "citations": graph_result["citations"],
+                    "source_str": graph_result["source_str"],
+                })
+            elif not candidate_data.get("cached", False):
+                # In non-search mode, only set linkedin_only if not cached
+                update_data.update({
+                    "citations": [],
+                    "source_str": "linkedin_only",
+                })
+            
+            candidate_data.update(update_data)
+            firestore.create_candidate(candidate_data)
 
             logging.info(f"[MEMORY] After graph search - {self._get_memory_usage()}")
 
@@ -95,7 +112,9 @@ class CandidateProcessor:
                 "status": "complete",
                 "sections": graph_result["sections"],
                 "summary": graph_result["summary"],
-                "overall_score": graph_result["overall_score"],
+                "required_met": graph_result["required_met"],
+                "optional_met": graph_result["optional_met"],
+                "search_mode": candidate_data.get("search_mode", True),
                 "fit": graph_result["fit"],
             }
 
@@ -121,44 +140,73 @@ class CandidateProcessor:
                 detail=f"Error running candidate evaluation: {str(e)}",
             )
 
-    def get_candidate_record(self, candidate_data: dict) -> dict:
-        """Create initial candidate record from LinkedIn URL"""
+    def get_candidate_record(self, candidate_data: Dict) -> Optional[Dict]:
+        """Get candidate record from LinkedIn URL."""
         try:
-            if not all(
-                k in candidate_data and candidate_data[k]
-                for k in ["name", "context", "public_identifier"]
-            ):
-                name, profile, public_identifier = get_linkedin_profile(
-                    candidate_data["url"]
+            public_id = self._extract_linkedin_id(candidate_data["url"])
+            if not public_id:
+                print(
+                    f"Could not extract public identifier from {candidate_data['url']}"
                 )
-                candidate_data["name"] = name
-                candidate_data["profile"] = profile
-                candidate_data["context"] = profile.to_context_string()
-                candidate_data["public_identifier"] = public_identifier
-                return {
-                    **self.default_settings,
-                    **candidate_data,
+                return None
+
+            # Check cache first
+            if firestore.check_cached_candidate_exists(public_id):
+                cached_candidate = firestore.get_cached_candidate(public_id)
+                # Use cached data but preserve search_mode from request
+                candidate_data.update(
+                    {
+                        "context": cached_candidate["context"],
+                        "name": cached_candidate["name"],
+                        "profile": cached_candidate["profile"],
+                        "public_identifier": public_id,
+                        "source_str": cached_candidate["source_str"],
+                        "citations": cached_candidate["citations"],
+                        "cached": True,
+                    }
+                )
+                return candidate_data
+
+            # Only call ProxyCurl if not cached
+            full_name, profile, public_id = get_linkedin_profile(candidate_data["url"])
+            if not profile:
+                return None
+
+            candidate_data.update(
+                {
+                    "context": profile.to_context_string(),
+                    "name": full_name,
+                    "profile": profile,
+                    "public_identifier": public_id,
+                    "cached": False,
                 }
+            )
+            return candidate_data
         except Exception as e:
-            print(f"Error processing LinkedIn URL {candidate_data['url']}: {str(e)}")
+            print(str(e))
             return None
 
-    async def process_urls(self, urls: List[str]) -> None:
-        """Process a list of LinkedIn URLs"""
+    async def process_urls(self, urls: List[str], search_mode: bool = True) -> None:
+        """Process a list of LinkedIn URLs in bulk."""
         try:
             print(f"Processing {len(urls)} LinkedIn URLs")
             candidates = []
             for url in urls:
-                candidate_data = Candidate(url=url).model_dump()
+                candidate_data = Candidate(
+                    url=url, search_mode=search_mode
+                ).model_dump()
+
                 candidate_data = await run_in_threadpool(
                     lambda: self.get_candidate_record(candidate_data)
                 )
                 if not candidate_data:
+                    print(f"Failed to fetch LinkedIn profile for {url}")
                     continue
+
                 candidates.append(candidate_data)
-            tasks = [
-                self.process_single_candidate(candidate) for candidate in candidates
-            ]
+
+            print(f"Successfully fetched {len(candidates)} profiles")
+            tasks = [self.process_single_candidate(candidate) for candidate in candidates]
             await asyncio.gather(*tasks)
         except Exception as e:
             print(str(e))

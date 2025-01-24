@@ -5,22 +5,9 @@ from datetime import datetime
 from datamodels.linkedin import LinkedInProfile
 
 
-class TraitType(str, Enum):
-    BOOLEAN = "BOOLEAN"
-    SCORE = "SCORE"
-
-    @classmethod
-    def _missing_(cls, value: str):
-        # Handle uppercase values by converting to lowercase
-        if isinstance(value, str):
-            return cls(value.upper())
-        return None
-
-
 class KeyTrait(BaseModel):
     trait: str
     description: str
-    trait_type: Optional[TraitType] = TraitType.BOOLEAN
     required: bool = True
 
 
@@ -46,6 +33,7 @@ class Candidate(BaseModel):
     public_identifier: str = None
     number_of_queries: int = 5
     confidence_threshold: float = 0.5
+    search_mode: bool = True  # Controls whether to use search or LinkedIn-only mode
     updated_at: datetime = Field(default_factory=datetime.now)
 
 
@@ -77,6 +65,7 @@ class ParaformEvaluateGraphLinkedinPayload(BaseModel):
 
 class BulkLinkedInPayload(BaseModel):
     urls: List[str]
+    search_mode: bool = True  # Controls whether to use search or LinkedIn-only mode
 
 
 class GetEmailPayload(BaseModel):

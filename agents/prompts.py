@@ -10,7 +10,7 @@ key_traits_prompt = """
 
     For each requirement, provide:
     - A short, specific trait name (not a full sentence)
-    - A detailed description of the trait that will tell a sourcer what to look for in a candidate
+    - A detailed description of the trait that will tell a sourcer what to look for in a candidate. This should be detailed - assume that the sourcer has no experience with the job and the company.
     - Whether the trait is required or a "nice to have"
 
     Guidelines:
