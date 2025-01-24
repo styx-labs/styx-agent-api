@@ -19,7 +19,6 @@ class KeyTraitsOutput(BaseModel):
 class TraitEvaluationOutput(BaseModel):
     value: Union[bool, int]  # Can be boolean, score (0-10)
     evaluation: str
-    trait_type: str  # The type of trait being evaluated (BOOLEAN, SCORE)
 
 
 class EvaluationInputState(TypedDict):
@@ -31,6 +30,7 @@ class EvaluationInputState(TypedDict):
     number_of_queries: int
     confidence_threshold: float
     search_mode: bool = True  # Controls whether to perform search or use LinkedIn-only mode
+    ideal_profiles: list[str]
 
 
 class CachedEvaluationInputState(TypedDict):
@@ -42,12 +42,15 @@ class CachedEvaluationInputState(TypedDict):
     key_traits: list[KeyTrait]
     citations: list[dict]
     source_str: str
+    ideal_profiles: list[str]
 
 
 class EvaluationOutputState(TypedDict):
     citations: list[dict]
     sections: list[dict]
     summary: str
-    overall_score: float
+    required_met: int
+    optional_met: int
     source_str: str
     candidate_profile: LinkedInProfile
+    fit: int

@@ -14,6 +14,7 @@ async def run_graph(
     candidate_full_name: str,
     profile: LinkedInProfile,
     key_traits: list[dict],
+    ideal_profiles: list[str],
     number_of_queries: int = 0,
     confidence_threshold: float = 0.0,
     search_mode: bool = True,
@@ -37,6 +38,7 @@ async def run_graph(
                     key_traits=key_traits,
                     citations=citations,
                     source_str=source_str,
+                    ideal_profiles=ideal_profiles,
                 )
             )
 
@@ -52,6 +54,7 @@ async def run_graph(
             number_of_queries=number_of_queries,
             confidence_threshold=confidence_threshold,
             search_mode=search_mode,
+            ideal_profiles=ideal_profiles,
         )
         if search_mode
         else CachedEvaluationInputState(
@@ -62,6 +65,7 @@ async def run_graph(
             key_traits=key_traits,
             citations=[],  # No citations in LinkedIn-only mode
             source_str="linkedin_only",
+            ideal_profiles=ideal_profiles,
         )
     )
     return await remote_graph.ainvoke(input_state)

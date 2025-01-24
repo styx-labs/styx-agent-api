@@ -56,10 +56,6 @@ class CandidateProcessor:
                 f"[MEMORY] Starting candidate processing - {self._get_memory_usage()}"
             )
 
-            candidate_data = await run_in_threadpool(
-                lambda: self.get_candidate_record(candidate_data)
-            )
-
             firestore.add_candidate_to_job(
                 self.job_id,
                 candidate_data["public_identifier"],
@@ -82,6 +78,7 @@ class CandidateProcessor:
                 candidate_full_name=candidate_data["name"],
                 profile=candidate_data["profile"],
                 key_traits=key_traits,
+                ideal_profiles=self.job_data["ideal_profiles"],
                 number_of_queries=candidate_data.get("number_of_queries", 0),
                 confidence_threshold=candidate_data.get("confidence_threshold", 0.0),
                 search_mode=candidate_data.get("search_mode", True),
@@ -115,8 +112,10 @@ class CandidateProcessor:
                 "status": "complete",
                 "sections": graph_result["sections"],
                 "summary": graph_result["summary"],
-                "overall_score": graph_result["overall_score"],
+                "required_met": graph_result["required_met"],
+                "optional_met": graph_result["optional_met"],
                 "search_mode": candidate_data.get("search_mode", True),
+                "fit": graph_result["fit"],
             }
 
             firestore.add_candidate_to_job(
@@ -207,7 +206,7 @@ class CandidateProcessor:
                 candidates.append(candidate_data)
 
             print(f"Successfully fetched {len(candidates)} profiles")
-            for candidate_data in candidates:
-                await self.process_single_candidate(candidate_data)
+            tasks = [self.process_single_candidate(candidate) for candidate in candidates]
+            await asyncio.gather(*tasks)
         except Exception as e:
             print(str(e))

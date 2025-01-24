@@ -5,22 +5,9 @@ from datetime import datetime
 from datamodels.linkedin import LinkedInProfile
 
 
-class TraitType(str, Enum):
-    BOOLEAN = "BOOLEAN"
-    SCORE = "SCORE"
-
-    @classmethod
-    def _missing_(cls, value: str):
-        # Handle uppercase values by converting to lowercase
-        if isinstance(value, str):
-            return cls(value.upper())
-        return None
-
-
 class KeyTrait(BaseModel):
     trait: str
     description: str
-    trait_type: Optional[TraitType] = TraitType.BOOLEAN
     required: bool = True
 
 
