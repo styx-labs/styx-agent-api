@@ -17,6 +17,7 @@ from models import (
     ReachoutPayload,
     GetEmailPayload,
     CheckoutSessionRequest,
+    EditKeyTraitsPayload,
 )
 from dotenv import load_dotenv
 from services.get_secret import get_secret
@@ -115,6 +116,29 @@ def create_job(job: Job, user_id: str = Depends(validate_user_id)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create job: {str(e)}",
         )
+
+
+@app.patch("/jobs/{job_id}/edit-key-traits")
+def edit_key_traits(
+    job_id: str,
+    payload: EditKeyTraitsPayload,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(validate_user_id),
+):
+    try:
+        firestore.edit_key_traits(job_id, user_id, payload.model_dump())
+        job_data = firestore.get_job(job_id, user_id)
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job with id {job_id} not found",
+            )
+    
+    processor = CandidateProcessor(job_id, job_data, user_id)
+    background_tasks.add_task(processor.reevaluate_candidates)
+
+    return {"message": "Candidate processing started"}
 
 
 @app.get("/jobs")

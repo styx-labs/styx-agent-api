@@ -210,3 +210,9 @@ class CandidateProcessor:
             await asyncio.gather(*tasks)
         except Exception as e:
             print(str(e))
+
+    async def reevaluate_candidates(self):
+        """Reevaluate all candidates for a job"""
+        candidates = firestore.get_candidates(self.job_id, self.user_id)
+        tasks = [self.process_single_candidate(candidate) for candidate in candidates]
+        await asyncio.gather(*tasks)

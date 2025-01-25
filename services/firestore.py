@@ -38,6 +38,12 @@ def decrement_search_credits(user_id: str) -> int:
     return user_dict["search_credits"]
 
 
+def edit_key_traits(job_id: str, user_id: str, key_traits: dict):
+    """Edit the key traits for a job"""
+    doc_ref = db.collection("users").document(user_id).collection("jobs").document(job_id)
+    doc_ref.update(key_traits)
+
+
 def create_job(job_data: dict, user_id: str) -> str:
     """Create a job under the user's collection"""
     emb_text = job_data["job_title"] + " " + job_data["job_description"]
