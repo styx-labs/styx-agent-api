@@ -6,6 +6,7 @@ from fastapi import (
     Depends,
     BackgroundTasks,
     Request,
+    Query,
 )
 from fastapi.middleware.cors import CORSMiddleware
 import services.firestore as firestore
@@ -33,6 +34,7 @@ import logging
 import sys
 from fastapi.concurrency import run_in_threadpool
 import stripe
+from typing import Optional, List
 
 
 load_dotenv()
@@ -259,9 +261,15 @@ async def create_candidates_bulk(
 
 
 @app.get("/jobs/{job_id}/candidates")
-def get_candidates(job_id: str, user_id: str = Depends(validate_user_id)):
+def get_candidates(
+    job_id: str,
+    filter_traits: Optional[List[str]] = Query(
+        None, description="List of traits to filter by"
+    ),
+    user_id: str = Depends(validate_user_id),
+):
     try:
-        candidates = firestore.get_candidates(job_id, user_id)
+        candidates = firestore.get_candidates(job_id, user_id, filter_traits)
         return {"candidates": candidates}
     except Exception as e:
         print(e)

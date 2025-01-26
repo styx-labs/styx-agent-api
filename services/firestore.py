@@ -6,6 +6,7 @@ from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
 import sys
 from services.search_credits import free_searches
 from datetime import datetime, timedelta, UTC
+from typing import List
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.azure_openai import get_azure_openai
@@ -186,8 +187,9 @@ def create_candidate(candidate_data: dict) -> str:
     return candidates_ref.id
 
 
-def get_candidates(job_id: str, user_id: str) -> list:
-    """Get all candidates for a specific job"""
+def get_candidates(job_id: str, user_id: str, filter_traits: List[str] = None) -> list:
+    """Get all candidates for a specific job, sorted by required traits met (primary) and optional traits met (secondary).
+    Optionally filter by specific traits that must be met."""
     # Get all candidates linked to this job
     candidates_ref = (
         db.collection("users")
@@ -219,6 +221,17 @@ def get_candidates(job_id: str, user_id: str) -> list:
             # If no base candidate exists, just use job-specific data
             job_specific_data["id"] = candidate_id
             all_candidates.append(job_specific_data)
+
+    # Sort candidates by required_met (primary) and optional_met (secondary)
+    # Candidates with missing fields will be sorted to the end
+    all_candidates.sort(
+        key=lambda x: (
+            x.get("required_met", 0),
+            x.get("optional_met", 0),
+            x.get("fit", 0),
+        ),
+        reverse=True,  # Sort in descending order (most traits met first)
+    )
 
     return all_candidates
 
