@@ -89,20 +89,24 @@ class CandidateProcessor:
 
             # Always update candidate data and create in Firestore
             update_data = {"profile": graph_result["candidate_profile"]}
-            
+
             if candidate_data.get("search_mode", True):
                 # In search mode, update citations and source_str from graph result
-                update_data.update({
-                    "citations": graph_result["citations"],
-                    "source_str": graph_result["source_str"],
-                })
+                update_data.update(
+                    {
+                        "citations": graph_result["citations"],
+                        "source_str": graph_result["source_str"],
+                    }
+                )
             elif not candidate_data.get("cached", False):
                 # In non-search mode, only set linkedin_only if not cached
-                update_data.update({
-                    "citations": [],
-                    "source_str": "linkedin_only",
-                })
-            
+                update_data.update(
+                    {
+                        "citations": [],
+                        "source_str": "linkedin_only",
+                    }
+                )
+
             candidate_data.update(update_data)
             firestore.create_candidate(candidate_data)
 
@@ -189,7 +193,7 @@ class CandidateProcessor:
     async def process_urls(self, urls: List[str], search_mode: bool = True) -> None:
         """Process a list of LinkedIn URLs in bulk."""
         try:
-            print(f"Processing {len(urls)} LinkedIn URLs")
+            logging.info(f"Processing {len(urls)} LinkedIn URLs")
             candidates = []
             for url in urls:
                 candidate_data = Candidate(
@@ -200,13 +204,15 @@ class CandidateProcessor:
                     lambda: self.get_candidate_record(candidate_data)
                 )
                 if not candidate_data:
-                    print(f"Failed to fetch LinkedIn profile for {url}")
+                    logging.error(f"Failed to fetch LinkedIn profile for {url}")
                     continue
 
                 candidates.append(candidate_data)
 
-            print(f"Successfully fetched {len(candidates)} profiles")
-            tasks = [self.process_single_candidate(candidate) for candidate in candidates]
+            logging.info(f"Successfully fetched {len(candidates)} profiles")
+            tasks = [
+                self.process_single_candidate(candidate) for candidate in candidates
+            ]
             await asyncio.gather(*tasks)
         except Exception as e:
-            print(str(e))
+            logging.error(str(e))
