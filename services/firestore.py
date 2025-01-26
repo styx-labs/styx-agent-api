@@ -213,17 +213,36 @@ def get_candidates(job_id: str, user_id: str, filter_traits: List[str] = None) -
 
         if base_candidate:
             # Merge base candidate data with job-specific data
-            # Job-specific data takes precedence
             merged_data = {**base_candidate, **job_specific_data}
             merged_data["id"] = candidate_id
             all_candidates.append(merged_data)
         else:
-            # If no base candidate exists, just use job-specific data
             job_specific_data["id"] = candidate_id
             all_candidates.append(job_specific_data)
 
+    # Filter candidates by specific traits if requested
+    if filter_traits:
+        filtered_candidates = []
+        for candidate in all_candidates:
+            sections = candidate.get("sections", [])
+            # Create a map of section name to value for easy lookup
+            trait_values = {
+                section["section"]: section["value"]
+                for section in sections
+                if isinstance(section, dict)
+                and "section" in section
+                and "value" in section
+            }
+
+            # Check if all filtered traits are met (value is True)
+            if all(
+                trait in trait_values and trait_values[trait] is True
+                for trait in filter_traits
+            ):
+                filtered_candidates.append(candidate)
+        all_candidates = filtered_candidates
+
     # Sort candidates by required_met (primary) and optional_met (secondary)
-    # Candidates with missing fields will be sorted to the end
     all_candidates.sort(
         key=lambda x: (
             x.get("required_met", 0),
