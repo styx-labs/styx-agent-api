@@ -6,7 +6,7 @@ from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
 import sys
 from services.search_credits import free_searches
 from datetime import datetime, timedelta, UTC
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.azure_openai import get_azure_openai
@@ -40,8 +40,12 @@ def decrement_search_credits(user_id: str) -> int:
 
 
 def create_job(job_data: dict, user_id: str) -> str:
-    """Create a job under the user's collection"""
-    emb_text = job_data["job_title"] + " " + job_data["job_description"]
+    """Create a job under the user's collection with optimized embedding"""
+    # Generate document reference first to avoid extra writes
+    doc_ref = db.collection("users").document(user_id).collection("jobs").document()
+
+    # Generate embedding
+    emb_text = f"{job_data['job_title']} {job_data['job_description']}"
     job_data["embedding"] = Vector(
         get_azure_openai()
         .embeddings.create(
@@ -51,7 +55,8 @@ def create_job(job_data: dict, user_id: str) -> str:
         .data[0]
         .embedding
     )
-    doc_ref = db.collection("users").document(user_id).collection("jobs").document()
+
+    # Single write operation
     doc_ref.set(job_data)
     return doc_ref.id
 
@@ -113,17 +118,31 @@ def get_job(job_id: str, user_id: str) -> dict:
 
 
 def delete_job(job_id: str, user_id: str) -> bool:
-    """Delete a job and all its candidates"""
+    """Delete a job and all its candidates efficiently"""
+    batch = db.batch()
     job_ref = (
         db.collection("users").document(user_id).collection("jobs").document(job_id)
     )
 
-    # Remove all candidates from the job
+    # Get all candidates in batches
     candidates_ref = job_ref.collection("candidates")
-    delete_collection(candidates_ref)
+    batch_size = 500
+    docs = candidates_ref.limit(batch_size).stream()
 
-    # Then delete the job
-    job_ref.delete()
+    deleted = 0
+    for doc in docs:
+        batch.delete(doc.reference)
+        deleted += 1
+
+        # Commit batch when size limit reached and start new batch
+        if deleted % batch_size == 0:
+            batch.commit()
+            batch = db.batch()
+
+    # Delete remaining documents and the job itself
+    batch.delete(job_ref)
+    batch.commit()
+
     return True
 
 
@@ -267,17 +286,22 @@ def get_cached_candidate(candidate_id: str) -> dict:
 
 def get_full_candidate(job_id: str, candidate_id: str, user_id: str) -> dict:
     """Get a specific candidate for a job"""
-    candidate_job_ref = (
-        db.collection("users")
-        .document(user_id)
-        .collection("jobs")
-        .document(job_id)
-        .collection("candidates")
-        .document(candidate_id)
-        .get()
-        .to_dict()
+    # Batch get both documents in one call
+    docs = db.get_all(
+        [
+            db.collection("users")
+            .document(user_id)
+            .collection("jobs")
+            .document(job_id)
+            .collection("candidates")
+            .document(candidate_id),
+            db.collection("candidates").document(candidate_id),
+        ]
     )
-    candidate_ref = db.collection("candidates").document(candidate_id).get().to_dict()
+
+    candidate_job_ref = docs[0].to_dict() if docs[0].exists else {}
+    candidate_ref = docs[1].to_dict() if docs[1].exists else {}
+
     return {**candidate_ref, **candidate_job_ref}
 
 
