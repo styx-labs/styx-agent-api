@@ -6,7 +6,7 @@ from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
 import sys
 from services.search_credits import free_searches
 from datetime import datetime, timedelta, UTC
-from typing import List
+from typing import List, Dict, Optional
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.azure_openai import get_azure_openai
@@ -187,10 +187,11 @@ def create_candidate(candidate_data: dict) -> str:
     return candidates_ref.id
 
 
-def get_candidates(job_id: str, user_id: str, filter_traits: List[str] = None) -> list:
-    """Get all candidates for a specific job, sorted by required traits met (primary) and optional traits met (secondary).
-    Optionally filter by specific traits that must be met."""
-    # Get all candidates linked to this job
+def get_candidates(
+    job_id: str, user_id: str, filter_traits: Optional[List[str]] = None
+) -> list:
+    """Get all candidates for a specific job, sorted by match criteria."""
+    # Get all job-specific candidate data in one batch
     candidates_ref = (
         db.collection("users")
         .document(user_id)
@@ -200,59 +201,62 @@ def get_candidates(job_id: str, user_id: str, filter_traits: List[str] = None) -
         .stream()
     )
 
-    # Build a list of candidates with merged data
+    # Build lookup of job-specific data
+    job_candidates = {doc.id: {**doc.to_dict(), "id": doc.id} for doc in candidates_ref}
+
+    if not job_candidates:
+        return []
+
+    # Batch get all base candidate data
+    base_refs = [
+        db.collection("candidates").document(candidate_id)
+        for candidate_id in job_candidates.keys()
+    ]
+    base_docs = db.get_all(base_refs)
+
+    # Merge data efficiently
     all_candidates = []
-    for job_candidate in candidates_ref:
-        candidate_id = job_candidate.id
-        job_specific_data = job_candidate.to_dict()
+    for base in base_docs:
+        candidate_data = {}
+        if base.exists:
+            candidate_data.update(base.to_dict())
+        if base.id in job_candidates:
+            candidate_data.update(job_candidates[base.id])
+        candidate_data["id"] = base.id
+        all_candidates.append(candidate_data)
 
-        # Get base candidate data
-        base_candidate = (
-            db.collection("candidates").document(candidate_id).get().to_dict()
-        )
-
-        if base_candidate:
-            # Merge base candidate data with job-specific data
-            merged_data = {**base_candidate, **job_specific_data}
-            merged_data["id"] = candidate_id
-            all_candidates.append(merged_data)
-        else:
-            job_specific_data["id"] = candidate_id
-            all_candidates.append(job_specific_data)
-
-    # Filter candidates by specific traits if requested
+    # Filter by traits if specified
     if filter_traits:
-        filtered_candidates = []
-        for candidate in all_candidates:
-            sections = candidate.get("sections", [])
-            # Create a map of section name to value for easy lookup
-            trait_values = {
-                section["section"]: section["value"]
-                for section in sections
-                if isinstance(section, dict)
-                and "section" in section
-                and "value" in section
-            }
+        all_candidates = [
+            candidate
+            for candidate in all_candidates
+            if _meets_trait_requirements(candidate.get("sections", []), filter_traits)
+        ]
 
-            # Check if all filtered traits are met (value is True)
-            if all(
-                trait in trait_values and trait_values[trait] is True
-                for trait in filter_traits
-            ):
-                filtered_candidates.append(candidate)
-        all_candidates = filtered_candidates
-
-    # Sort candidates by required_met (primary) and optional_met (secondary)
-    all_candidates.sort(
+    # Sort using tuple comparison for efficiency
+    return sorted(
+        all_candidates,
         key=lambda x: (
             x.get("required_met", 0),
             x.get("optional_met", 0),
             x.get("fit", 0),
         ),
-        reverse=True,  # Sort in descending order (most traits met first)
+        reverse=True,
     )
 
-    return all_candidates
+
+def _meets_trait_requirements(sections: List[Dict], required_traits: List[str]) -> bool:
+    """Check if candidate meets all required trait requirements."""
+    trait_values = {
+        section["section"]: section["value"]
+        for section in sections
+        if isinstance(section, dict) and "section" in section and "value" in section
+    }
+
+    return all(
+        trait in trait_values and trait_values[trait] is True
+        for trait in required_traits
+    )
 
 
 def get_cached_candidate(candidate_id: str) -> dict:
