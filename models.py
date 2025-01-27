@@ -11,6 +11,10 @@ class KeyTrait(BaseModel):
     required: bool = True
 
 
+class EditKeyTraitsPayload(BaseModel):
+    key_traits: List[KeyTrait]
+
+
 class Job(BaseModel):
     job_description: str
     key_traits: List[KeyTrait]
