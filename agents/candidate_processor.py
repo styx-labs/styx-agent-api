@@ -175,6 +175,22 @@ class CandidateProcessor:
             full_name, profile, public_id = get_linkedin_profile(candidate_data["url"])
             if not profile:
                 return None
+            
+            if firestore.check_cached_candidate_exists(public_id):
+                cached_candidate = firestore.get_cached_candidate(public_id)
+                # Use cached data but preserve search_mode from request
+                candidate_data.update(
+                    {
+                        "context": cached_candidate["context"],
+                        "name": cached_candidate["name"],
+                        "profile": cached_candidate["profile"],
+                        "public_identifier": public_id,
+                        "source_str": cached_candidate["source_str"],
+                        "citations": cached_candidate["citations"],
+                        "cached": True,
+                    }
+                )
+                return candidate_data
 
             candidate_data.update(
                 {
