@@ -286,22 +286,17 @@ def get_cached_candidate(candidate_id: str) -> dict:
 
 def get_full_candidate(job_id: str, candidate_id: str, user_id: str) -> dict:
     """Get a specific candidate for a job"""
-    # Batch get both documents in one call
-    docs = db.get_all(
-        [
-            db.collection("users")
-            .document(user_id)
-            .collection("jobs")
-            .document(job_id)
-            .collection("candidates")
-            .document(candidate_id),
-            db.collection("candidates").document(candidate_id),
-        ]
+    candidate_job_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("jobs")
+        .document(job_id)
+        .collection("candidates")
+        .document(candidate_id)
+        .get()
+        .to_dict()
     )
-
-    candidate_job_ref = docs[0].to_dict() if docs[0].exists else {}
-    candidate_ref = docs[1].to_dict() if docs[1].exists else {}
-
+    candidate_ref = db.collection("candidates").document(candidate_id).get().to_dict()
     return {**candidate_ref, **candidate_job_ref}
 
 
