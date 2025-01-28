@@ -66,4 +66,19 @@ def get_email(linkedin_profile_url: str):
     }
     response = requests.get(api_endpoint, params=params, headers=headers)
     response = response.json()
+    if not response["emails"]:
+        return get_work_email(linkedin_profile_url)
+    return response["emails"][0]
+
+
+def get_work_email(linkedin_profile_url: str):
+    api_key = get_secret("proxycurl-api-key", "1")
+    headers = {"Authorization": "Bearer " + api_key}
+    api_endpoint = "https://nubela.co/proxycurl/api/linkedin/profile/email"
+    params = {
+        "linkedin_profile_url": linkedin_profile_url,
+        "page_size": 1,
+    }
+    response = requests.get(api_endpoint, params=params, headers=headers)
+    response = response.json()
     return response["emails"][0]
