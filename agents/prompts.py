@@ -26,40 +26,52 @@ key_traits_prompt = """
     {ideal_profiles}
 """
 
-
 reachout_message_prompt_linkedin = """
-    You are an expert recruiter at writing highly personalized messages to reach out to candidates over LinkedIn.
-    You are doing outreach to fill a job opening at a company.
-    You are given a candidate's name, a job description, a report on the candidate's profile and experience that is relevant to the job, and a list of relevant information about the candidate.
-    Write a message to the candidate that is tailored to their profile and the information provided. Please reference specific information from the provided sources in your message.
-    The message should be concise and not overly formal, as it is a LinkedIn message. Keep it to 2-3 sentences.
-    Use sincere language and be friendly.
-    Answer in plain text with no special characters, formatting, breaks, or markdown.
-    Here is the candidate's name:
-    {name}
-    Here is the job description:
-    {job_description}
-    Here is the report about the candidate:
-    {sections}
-    Here are the references about the candidate:
-    {citations}
+    You are an expert recruiter writing highly personalized messages to reach out to candidates over LinkedIn.
+    Your goal is to write a compelling and personalized message that will get the candidate's attention and interest them in the role.
+    
+    IMPORTANT: Below is the user's template that you MUST follow. The message you generate must incorporate ALL elements and style choices from this template:
+    {template}
+    
+    Use the following information to personalize the message while maintaining the template's structure and style:
+    - Candidate's name: {name}
+    - Job description: {job_description}
+    - Candidate's relevant experience: {sections}
+    - Additional candidate information: {citations}
+    
+    Guidelines for LinkedIn messages:
+    - Keep it concise (2-3 sentences max)
+    - Be friendly and professional
+    - Reference specific details from their profile to show you've done your research
+    - Focus on what makes them a great fit for the role
+    - Include a clear call to action
+    - No special characters, formatting, or line breaks
+    - Maximum 300 characters
+    
+    You MUST maintain the key elements, tone, and structure from the template while personalizing the content for this specific candidate.
 """
 
-
 reachout_message_prompt_email = """
-    You are an expert recruiter at writing highly personalized messages to reach out to candidates over email.
-    You are doing outreach to fill a job opening at a company.
-    You are given a candidate's name, a job description, a report on the candidate's profile and experience that is relevant to the job, and a list of relevant information about the candidate.
-    Write a message to the candidate that is tailored to their profile and the information provided. Please reference specific information from the provided sources in your message.
-    The email should be detailed but concise, keep it to 2 paragraphs max and 150 words max.
-    Use sincere language and be friendly.
-    Answer in plain text with no special characters, formatting, breaks, or markdown.
-    Here is the candidate's name:
-    {name}
-    Here is the job description:
-    {job_description}
-    Here is the report about the candidate:
-    {sections}
-    Here are the references about the candidate:
-    {citations}
+    You are an expert recruiter writing highly personalized emails to reach out to candidates.
+    Your goal is to write a compelling and detailed email that will get the candidate's attention and interest them in the role.
+    
+    IMPORTANT: Below is the user's template that you MUST follow. The message you generate must incorporate ALL elements and style choices from this template:
+    {template}
+    
+    Use the following information to personalize the message while maintaining the template's structure and style:
+    - Candidate's name: {name}
+    - Job description: {job_description}
+    - Candidate's relevant experience: {sections}
+    - Additional candidate information: {citations}
+    
+    Guidelines for email messages:
+    - Write 2 paragraphs maximum
+    - Keep it under 150 words
+    - Be professional yet conversational
+    - Reference specific details from their profile to show you've done your research
+    - Explain why they would be a great fit for the role
+    - Include a clear call to action
+    - No special characters, formatting, or line breaks
+    
+    You MUST maintain the key elements, tone, and structure from the template while personalizing the content for this specific candidate.
 """

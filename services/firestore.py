@@ -6,7 +6,9 @@ from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
 import sys
 from services.search_credits import free_searches
 from datetime import datetime, timedelta, UTC
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional
+from datamodels.templates import UserTemplates
+from datamodels.instructions import CustomInstructions
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.azure_openai import get_azure_openai
@@ -41,7 +43,9 @@ def decrement_search_credits(user_id: str) -> int:
 
 def edit_key_traits(job_id: str, user_id: str, key_traits: dict):
     """Edit the key traits for a job"""
-    doc_ref = db.collection("users").document(user_id).collection("jobs").document(job_id)
+    doc_ref = (
+        db.collection("users").document(user_id).collection("jobs").document(job_id)
+    )
     doc_ref.update(key_traits)
 
 
@@ -370,3 +374,70 @@ def add_search_credits(user_id: str, credits: int) -> int:
     doc_ref.set(user_dict)
 
     return new_total
+
+
+def get_user_templates(user_id: str) -> UserTemplates:
+    """Get user's templates"""
+    templates_ref = db.collection("users").document(user_id).collection("settings")
+    linkedin_doc = templates_ref.document("linkedin_template").get()
+    email_doc = templates_ref.document("email_template").get()
+
+    return UserTemplates(
+        linkedin_template=linkedin_doc.get("content") if linkedin_doc.exists else None,
+        email_template=email_doc.get("content") if email_doc.exists else None,
+    )
+
+
+def set_user_templates(user_id: str, templates: UserTemplates) -> UserTemplates:
+    """Set user's templates"""
+    templates_ref = db.collection("users").document(user_id).collection("settings")
+    batch = db.batch()
+
+    if templates.linkedin_template is not None:
+        linkedin_ref = templates_ref.document("linkedin_template")
+        batch.set(linkedin_ref, {"content": templates.linkedin_template})
+
+    if templates.email_template is not None:
+        email_ref = templates_ref.document("email_template")
+        batch.set(email_ref, {"content": templates.email_template})
+
+    batch.commit()
+    return get_user_templates(user_id)
+
+
+def delete_user_templates(user_id: str) -> None:
+    """Delete user's templates"""
+    templates_ref = db.collection("users").document(user_id).collection("settings")
+    batch = db.batch()
+
+    linkedin_ref = templates_ref.document("linkedin_template")
+    email_ref = templates_ref.document("email_template")
+
+    batch.delete(linkedin_ref)
+    batch.delete(email_ref)
+
+    batch.commit()
+
+
+def get_custom_instructions(user_id: str) -> CustomInstructions:
+    """Get user's custom evaluation instructions"""
+    settings_ref = db.collection("users").document(user_id).collection("settings")
+    doc = settings_ref.document("evaluation_instructions").get()
+
+    return CustomInstructions(
+        evaluation_instructions=doc.get("content") if doc.exists else None
+    )
+
+
+def set_custom_instructions(
+    user_id: str, instructions: CustomInstructions
+) -> CustomInstructions:
+    """Set user's custom evaluation instructions"""
+    settings_ref = db.collection("users").document(user_id).collection("settings")
+
+    if instructions.evaluation_instructions is not None:
+        settings_ref.document("evaluation_instructions").set(
+            {"content": instructions.evaluation_instructions}
+        )
+
+    return get_custom_instructions(user_id)

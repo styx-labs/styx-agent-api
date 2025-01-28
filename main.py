@@ -36,6 +36,14 @@ import sys
 from fastapi.concurrency import run_in_threadpool
 import stripe
 from typing import Optional, List
+from services.firestore import (
+    get_user_templates,
+    set_user_templates,
+    get_custom_instructions,
+    set_custom_instructions,
+)
+from datamodels.templates import UserTemplates
+from datamodels.instructions import CustomInstructions
 
 
 load_dotenv()
@@ -133,10 +141,10 @@ def edit_key_traits(
     except Exception as e:
         print(e)
         raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Job with id {job_id} not found",
-            )
-    
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job with id {job_id} not found",
+        )
+
     processor = CandidateProcessor(job_id, job_data, user_id)
     background_tasks.add_task(processor.reevaluate_candidates)
 
@@ -207,6 +215,7 @@ async def generate_reachout(
             sections=candidate["sections"],
             citations=candidate["citations"],
             format=payload.format,
+            user_id=user_id,
         )
         return {"reachout": reachout}
     except Exception as e:
@@ -448,3 +457,37 @@ async def stripe_webhook(request: Request):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing webhook: {str(e)}",
         )
+
+
+@app.put("/settings/templates", response_model=UserTemplates)
+async def update_user_templates(
+    templates: UserTemplates,
+    user_id: str = Depends(validate_user_id),
+):
+    """Update user's templates"""
+    return set_user_templates(user_id, templates)
+
+
+@app.get("/settings/templates", response_model=UserTemplates)
+async def get_all_user_templates(
+    user_id: str = Depends(validate_user_id),
+):
+    """Get user's templates"""
+    return get_user_templates(user_id)
+
+
+@app.put("/settings/evaluation-instructions", response_model=CustomInstructions)
+async def update_evaluation_instructions(
+    instructions: CustomInstructions,
+    user_id: str = Depends(validate_user_id),
+):
+    """Update user's custom evaluation instructions"""
+    return set_custom_instructions(user_id, instructions)
+
+
+@app.get("/settings/evaluation-instructions", response_model=CustomInstructions)
+async def get_evaluation_instructions(
+    user_id: str = Depends(validate_user_id),
+):
+    """Get user's custom evaluation instructions"""
+    return get_custom_instructions(user_id)

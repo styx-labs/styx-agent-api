@@ -31,7 +31,7 @@ def get_linkedin_profile(url):
         experiences=[
             LinkedInExperience(
                 title=exp["title"],
-                company=exp["company"],
+                company=exp["company"] if "company" in exp else "No Company",
                 description=exp.get("description"),
                 starts_at=convert_date_dict(exp.get("starts_at")),
                 ends_at=convert_date_dict(exp.get("ends_at")),

@@ -15,8 +15,8 @@ class AILinkedinJobDescription(BaseModel):
 
 
 class LinkedInExperience(BaseModel):
-    title: str
-    company: str
+    title: Optional[str] = None
+    company: Optional[str] = None
     description: Optional[str] = None
     starts_at: Optional[date] = None
     ends_at: Optional[date] = None
