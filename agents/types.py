@@ -29,9 +29,7 @@ class EvaluationInputState(TypedDict):
     key_traits: list[KeyTrait]
     number_of_queries: int
     confidence_threshold: float
-    search_mode: bool = (
-        True  # Controls whether to perform search or use LinkedIn-only mode
-    )
+    search_mode: bool = True
     ideal_profiles: list[str]
     custom_instructions: str = None
 
