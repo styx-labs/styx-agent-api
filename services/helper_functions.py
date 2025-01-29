@@ -58,6 +58,7 @@ def get_reachout_message(
     citations: list[dict],
     format: str,
     user_id: str = None,
+    template_content: str = None,
 ) -> str:
     sections_str = "\n".join(
         [f"{section['section']}: {section['content']} " for section in sections]
@@ -66,16 +67,17 @@ def get_reachout_message(
         [f"{citation['distilled_content']}" for citation in citations]
     )
 
-    # Get user's templates
-    template_content = (
-        "No template provided - use default professional recruiting style."
-    )
-    if user_id:
-        templates = get_user_templates(user_id)
-        if format == "linkedin":
-            template_content = templates.linkedin_template or template_content
-        else:
-            template_content = templates.email_template or template_content
+    # Use provided test template if available, otherwise get user's templates
+    if template_content is not None:
+        template = template_content
+    else:
+        template = "No template provided - use default professional recruiting style."
+        if user_id:
+            templates = get_user_templates(user_id)
+            if format == "linkedin":
+                template = templates.linkedin_template or template
+            else:
+                template = templates.email_template or template
 
     # Use default prompt based on format
     prompt = (
@@ -92,7 +94,7 @@ def get_reachout_message(
                     job_description=job_description,
                     sections=sections_str,
                     citations=citations_str,
-                    template=template_content,
+                    template=template,
                 )
             ),
             HumanMessage(
