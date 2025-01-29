@@ -263,12 +263,12 @@ async def create_candidates_bulk(
     user_id: str = Depends(validate_user_id),
 ):
     search_credits = firestore.get_search_credits(user_id)
-    required_credits = len(payload.urls)
+    num_urls = len(payload.urls)
 
-    if search_credits < required_credits:
+    if search_credits < num_urls:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=f"Insufficient search credits. You have {search_credits} credits but need {required_credits} credits to process all URLs.",
+            detail=f"Insufficient search credits. You have {search_credits} credits but need {num_urls} credits to process all URLs.",
         )
 
     job_data = firestore.get_job(job_id, user_id)
@@ -371,9 +371,34 @@ def get_search_credits(user_id: str = Depends(validate_user_id)):
     try:
         return {"search_credits": firestore.get_search_credits(user_id)}
     except Exception as e:
+        print(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving search credits: {str(e)}",
+        )
+    
+@app.get("/show-popup")
+def show_popup(user_id: str = Depends(validate_user_id)):
+    try:
+        return {"show_popup": firestore.show_popup(user_id)}
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving search credits: {str(e)}",
+        )
+
+
+@app.post("/set-popup-shown")
+def set_popup_shown(user_id: str = Depends(validate_user_id)):
+    try:
+        firestore.set_popup_shown(user_id)
+        return {"success": True}
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error setting popup shown: {str(e)}",
         )
 
 

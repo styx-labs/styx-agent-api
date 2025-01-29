@@ -27,6 +27,21 @@ def get_search_credits(user_id: str) -> int:
     return user_dict["search_credits"]
 
 
+def show_popup(user_id: str) -> bool:
+    doc_ref = db.collection("users").document(user_id)
+    doc = doc_ref.get()
+    user_dict = doc.to_dict() if doc.exists else {}
+    if "show_popup" not in user_dict:
+        user_dict["show_popup"] = True
+        doc_ref.set(user_dict)
+    return user_dict["show_popup"]
+
+
+def set_popup_shown(user_id: str):
+    doc_ref = db.collection("users").document(user_id)
+    doc_ref.update({"show_popup": False})
+
+
 def decrement_search_credits(user_id: str) -> int:
     """Decrement the number of search credits remaining for a user"""
     doc_ref = db.collection("users").document(user_id)
