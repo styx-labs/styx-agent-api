@@ -8,6 +8,7 @@ from agents.prompts import (
     reachout_message_prompt_email,
 )
 from services.proxycurl import get_linkedin_profile
+from services.firestore import get_user_templates
 
 
 @traceable(name="get_list_of_profiles")
@@ -56,6 +57,8 @@ def get_reachout_message(
     sections: list[dict],
     citations: list[dict],
     format: str,
+    user_id: str = None,
+    template_content: str = None,
 ) -> str:
     sections_str = "\n".join(
         [f"{section['section']}: {section['content']} " for section in sections]
@@ -63,11 +66,26 @@ def get_reachout_message(
     citations_str = "\n".join(
         [f"{citation['distilled_content']}" for citation in citations]
     )
+
+    # Use provided test template if available, otherwise get user's templates
+    if template_content is not None:
+        template = template_content
+    else:
+        template = "No template provided - use default professional recruiting style."
+        if user_id:
+            templates = get_user_templates(user_id)
+            if format == "linkedin":
+                template = templates.linkedin_template or template
+            else:
+                template = templates.email_template or template
+
+    # Use default prompt based on format
     prompt = (
         reachout_message_prompt_linkedin
         if format == "linkedin"
         else reachout_message_prompt_email
     )
+
     output = llm.invoke(
         [
             SystemMessage(
@@ -76,13 +94,12 @@ def get_reachout_message(
                     job_description=job_description,
                     sections=sections_str,
                     citations=citations_str,
+                    template=template,
                 )
-            )
-        ]
-        + [
+            ),
             HumanMessage(
-                content="Write a message to the candidate that is tailored to their profile and the information provided."
-            )
+                content="Generate a message that strictly follows the provided template structure and style, while personalizing the specific details for this candidate. Make sure to include all key elements from the template."
+            ),
         ]
     )
     return output.content

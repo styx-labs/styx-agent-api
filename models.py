@@ -78,3 +78,8 @@ class GetEmailPayload(BaseModel):
 
 class CheckoutSessionRequest(BaseModel):
     planId: str
+
+
+class TestTemplateRequest(BaseModel):
+    format: str
+    template_content: str

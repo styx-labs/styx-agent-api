@@ -19,6 +19,7 @@ from models import (
     GetEmailPayload,
     CheckoutSessionRequest,
     EditKeyTraitsPayload,
+    TestTemplateRequest,
 )
 from dotenv import load_dotenv
 from services.get_secret import get_secret
@@ -36,6 +37,14 @@ import sys
 from fastapi.concurrency import run_in_threadpool
 import stripe
 from typing import Optional, List
+from services.firestore import (
+    get_user_templates,
+    set_user_templates,
+    get_custom_instructions,
+    set_custom_instructions,
+)
+from datamodels.templates import UserTemplates
+from datamodels.instructions import CustomInstructions
 
 
 load_dotenv()
@@ -133,10 +142,10 @@ def edit_key_traits(
     except Exception as e:
         print(e)
         raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Job with id {job_id} not found",
-            )
-    
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job with id {job_id} not found",
+        )
+
     processor = CandidateProcessor(job_id, job_data, user_id)
     background_tasks.add_task(processor.reevaluate_candidates)
 
@@ -207,6 +216,7 @@ async def generate_reachout(
             sections=candidate["sections"],
             citations=candidate["citations"],
             format=payload.format,
+            user_id=user_id,
         )
         return {"reachout": reachout}
     except Exception as e:
@@ -472,4 +482,115 @@ async def stripe_webhook(request: Request):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing webhook: {str(e)}",
+        )
+
+
+@app.put("/settings/templates", response_model=UserTemplates)
+async def update_user_templates(
+    templates: UserTemplates,
+    user_id: str = Depends(validate_user_id),
+):
+    """Update user's templates"""
+    return set_user_templates(user_id, templates)
+
+
+@app.get("/settings/templates", response_model=UserTemplates)
+async def get_all_user_templates(
+    user_id: str = Depends(validate_user_id),
+):
+    """Get user's templates"""
+    return get_user_templates(user_id)
+
+
+@app.put("/settings/evaluation-instructions", response_model=CustomInstructions)
+async def update_evaluation_instructions(
+    instructions: CustomInstructions,
+    user_id: str = Depends(validate_user_id),
+):
+    """Update user's custom evaluation instructions"""
+    return set_custom_instructions(user_id, instructions)
+
+
+@app.get("/settings/evaluation-instructions", response_model=CustomInstructions)
+async def get_evaluation_instructions(
+    user_id: str = Depends(validate_user_id),
+):
+    """Get user's custom evaluation instructions"""
+    return get_custom_instructions(user_id)
+
+
+
+
+
+@app.post("/test-reachout-template")
+async def test_reachout_template(
+    request: TestTemplateRequest,
+    user_id: str = Depends(validate_user_id),
+):
+    """Test a reach out message template using sample data"""
+    try:
+        # Use fake candidate and job data for testing
+        fake_candidate = {
+            "name": "Alex Thompson",
+            "sections": [
+                {
+                    "section": "Current Role",
+                    "content": "Senior Software Engineer at Tech Corp, leading a team of 5 engineers in building scalable cloud solutions",
+                },
+                {
+                    "section": "Technical Skills",
+                    "content": "Expertise in Python, React, and AWS. Strong background in distributed systems and microservices architecture",
+                },
+                {
+                    "section": "Leadership Experience",
+                    "content": "3 years of team leadership experience, mentoring junior developers and managing project deliverables",
+                },
+            ],
+            "citations": [
+                {
+                    "distilled_content": "Led migration of monolithic application to microservices, improving system reliability by 40%"
+                },
+                {
+                    "distilled_content": "Implemented CI/CD pipeline reducing deployment time from 2 hours to 15 minutes"
+                },
+                {
+                    "distilled_content": "Regular speaker at tech conferences on cloud architecture and system design"
+                },
+            ],
+        }
+
+        fake_job = {
+            "job_description": """
+            We're seeking a Senior Software Engineer to join our growing team. The ideal candidate will:
+            - Have strong experience in cloud technologies and distributed systems
+            - Lead and mentor junior developers
+            - Drive technical architecture decisions
+            - Have excellent communication skills
+            
+            Required Skills:
+            - 5+ years of software development experience
+            - Strong knowledge of Python and modern web frameworks
+            - Experience with cloud platforms (AWS/GCP/Azure)
+            - Track record of leading technical projects
+            """
+        }
+
+        # Generate message with test template
+        reachout = get_reachout_message(
+            name=fake_candidate["name"],
+            job_description=fake_job["job_description"],
+            sections=fake_candidate["sections"],
+            citations=fake_candidate["citations"],
+            format=request.format,
+            template_content=request.template_content,
+        )
+
+        return {
+            "reachout": reachout,
+        }
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error testing reachout template: {str(e)}",
         )
