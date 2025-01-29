@@ -21,6 +21,7 @@ async def run_graph(
     cached: bool = False,
     citations: list[dict] = None,
     source_str: str = None,
+    custom_instructions: str = None,
 ) -> EvaluationOutputState:
     """Run the evaluation graph with optional search mode and caching."""
     remote_graph = RemoteRunnable(os.getenv("EVAL_ENDPOINT"))
@@ -39,11 +40,14 @@ async def run_graph(
                     citations=citations,
                     source_str=source_str,
                     ideal_profiles=ideal_profiles,
+                    custom_instructions=custom_instructions,
                 )
             )
 
     # Otherwise do a fresh evaluation
-    remote_graph = RemoteRunnable(os.getenv("SEARCH_ENDPOINT" if search_mode else "EVAL_ENDPOINT"))
+    remote_graph = RemoteRunnable(
+        os.getenv("SEARCH_ENDPOINT" if search_mode else "EVAL_ENDPOINT")
+    )
     input_state = (
         EvaluationInputState(
             job_description=job_description,
@@ -55,6 +59,7 @@ async def run_graph(
             confidence_threshold=confidence_threshold,
             search_mode=search_mode,
             ideal_profiles=ideal_profiles,
+            custom_instructions=custom_instructions,
         )
         if search_mode
         else CachedEvaluationInputState(
@@ -66,6 +71,7 @@ async def run_graph(
             citations=[],  # No citations in LinkedIn-only mode
             source_str="linkedin_only",
             ideal_profiles=ideal_profiles,
+            custom_instructions=custom_instructions,
         )
     )
     return await remote_graph.ainvoke(input_state)

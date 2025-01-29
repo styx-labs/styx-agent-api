@@ -9,6 +9,7 @@ import logging
 from datetime import datetime
 from fastapi.concurrency import run_in_threadpool
 from services.evaluate import run_graph
+from services.firestore import get_custom_instructions
 import re
 
 
@@ -85,6 +86,7 @@ class CandidateProcessor:
                 cached=candidate_data.get("cached", False),
                 citations=candidate_data.get("citations"),
                 source_str=candidate_data.get("source_str"),
+                custom_instructions=get_custom_instructions(self.user_id).evaluation_instructions,
             )
 
             # Always update candidate data and create in Firestore
