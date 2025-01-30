@@ -1,7 +1,6 @@
-from typing import List, Set, Optional, Dict
+from typing import List, Set, Optional
 from datetime import date
 from enum import Enum
-import calendar
 from .base import SerializableModel
 
 
@@ -9,12 +8,18 @@ from .base import SerializableModel
 class FundingStage(str, Enum):
     """Enum for company funding stages."""
 
+    PRE_SEED = "Pre-Seed"
     SEED = "Seed"
     SERIES_A = "Series A"
     SERIES_B = "Series B"
     SERIES_C = "Series C"
-    SERIES_D_PLUS = "Series D+"
+    SERIES_D = "Series D"
+    SERIES_E = "Series E"
+    SERIES_F = "Series F"
+    SERIES_G = "Series G"
+    SERIES_H = "Series H"
     IPO = "IPO"
+    ACQUIRED = "Acquired"
     UNKNOWN = "Unknown"
 
 
@@ -224,41 +229,17 @@ class CareerMetrics(SerializableModel):
     """Model for career analysis metrics."""
 
     total_experience_months: int
-    total_experience_years: float
     average_tenure_months: int
-    average_tenure_years: float
     current_tenure_months: int
-    current_tenure_years: float
     tech_stacks: Optional[List[str]] = None
     career_tags: Optional[List[str]] = None
-    experience_by_stage: List[ExperienceStageMetrics] = []
-
-    @staticmethod
-    def calculate_months_between(start_date: date, end_date: date) -> float:
-        """Calculate months between two dates."""
-        months = (end_date.year - start_date.year) * 12 + (
-            end_date.month - start_date.month
-        )
-        # Add partial month
-        days_in_month = calendar.monthrange(end_date.year, end_date.month)[1]
-        months += end_date.day / days_in_month
-        return round(months, 1)
 
     def to_dict(self) -> dict:
         """Convert career metrics to a dictionary format."""
         return {
-            "average_tenure_years": self.average_tenure_years,
-            "current_tenure_years": self.current_tenure_years,
-            "total_experience_years": self.total_experience_years,
+            "total_experience_months": self.total_experience_months,
+            "average_tenure_months": self.average_tenure_months,
+            "current_tenure_months": self.current_tenure_months,
             "tech_stacks": self.tech_stacks,
             "career_tags": self.career_tags,
-            "experience_by_stage": [
-                {
-                    "company": exp.company_name,
-                    "stage": exp.funding_stage,
-                    "duration_years": exp.duration_months / 12,
-                    "tier": exp.company_tier,
-                }
-                for exp in self.experience_by_stage
-            ],
         }

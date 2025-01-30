@@ -1,12 +1,7 @@
-from typing import Dict
-from google.cloud.firestore import DocumentReference
-from datamodels.linkedin import (
-    LinkedInProfile,
-    LinkedInCompany,
-)
+import re
+from datamodels.linkedin import LinkedInProfile, LinkedInCompany
 from services.proxycurl import get_linkedin_profile, get_company
 from services.firestore import db
-from agents.career_analyzer import analyze_career
 
 
 def get_linkedin_profile_with_companies(url: str) -> tuple[str, LinkedInProfile, str]:
@@ -24,13 +19,38 @@ def get_linkedin_profile_with_companies(url: str) -> tuple[str, LinkedInProfile,
     # First get the basic profile
     full_name, profile, public_id = get_linkedin_profile(url)
 
-    # For each company in experiences, get or fetch company data
+    # Get and store company data for experiences
+    get_experience_companies(profile)
+
+    # Analyze career metrics
+    profile.analyze_career()
+
+    # Save profile to Firebase - company_data will be automatically excluded
+    profile_dict = profile.dict()
+    profile_ref = db.collection("candidates").document(public_id)
+    profile_ref.set(profile_dict, merge=True)
+
+    return full_name, profile, public_id
+
+
+def get_experience_companies(profile: LinkedInProfile) -> None:
+    """
+    Get and store company data for all experiences in a profile.
+    If company exists in Firebase, use cached data.
+    If not, fetch from ProxyCurl and store in Firebase.
+    Attaches company data to each experience in the profile.
+    """
     for exp in profile.experiences:
         if (
             exp.company_linkedin_profile_url
             and "school" not in exp.company_linkedin_profile_url
         ):
-            company_id = exp.company_linkedin_profile_url.split("/")[-1]
+            # Extract company ID from URL using regex
+            match = re.search(
+                r"linkedin\.com/company/([^/?]+)", exp.company_linkedin_profile_url
+            )
+            company_id = match.group(1) if match else None
+
             if company_id:
                 company_ref = db.collection("companies").document(company_id)
                 company_doc = company_ref.get()
@@ -45,70 +65,3 @@ def get_linkedin_profile_with_companies(url: str) -> tuple[str, LinkedInProfile,
                     company_dict = company.dict()
                     company_ref.set(company_dict)
                     exp.company_data = company
-
-    # Analyze career metrics
-    profile.analyze_career()
-
-    # Save profile to Firebase - company_data will be automatically excluded
-    profile_dict = profile.dict()
-    profile_ref = db.collection("candidates").document(public_id)
-    profile_ref.set(profile_dict, merge=True)
-
-    return full_name, profile, public_id
-
-
-def store_experience_companies(profile: LinkedInProfile) -> None:
-    """
-    Fetch and store company data for all experiences in a profile.
-    Each company is stored in Firebase with its LinkedIn URL as the ID.
-    """
-    for exp in profile.experiences:
-        if exp.company_linkedin_profile_url:
-            # Get company data
-            company = get_company(exp.company_linkedin_profile_url)
-
-            # Store in Firebase
-            company_dict = company.dict()
-            company_id = exp.company_linkedin_profile_url.split("/")[-1]
-            db.collection("companies").document(company_id).set(
-                company_dict, merge=True
-            )
-
-
-async def save_company_to_firebase(
-    company: LinkedInCompany, company_url: str
-) -> DocumentReference:
-    """Save company data to Firebase and return the document reference."""
-    company_dict = company.dict()
-    company_ref = db.collection("companies").document(company_url.split("/")[-1])
-    await company_ref.set(company_dict, merge=True)
-    return company_ref
-
-
-def get_experience_companies(
-    profile: LinkedInProfile,
-) -> Dict[str, tuple[LinkedInCompany, DocumentReference]]:
-    """
-    Get company data for all experiences in a profile.
-    Returns a dictionary mapping company URLs to tuples of (company data, Firebase reference).
-    """
-    company_data = {}
-    for exp in profile.experiences:
-        if exp.company_linkedin_profile_url:
-            company_data[exp.company_linkedin_profile_url] = get_company(
-                exp.company_linkedin_profile_url
-            )
-
-    return company_data
-
-
-def enrich_profile_with_company_refs(
-    profile: LinkedInProfile,
-    company_data: Dict[str, tuple[LinkedInCompany, DocumentReference]],
-) -> None:
-    """Enrich profile experiences with company data and Firebase references."""
-    for exp in profile.experiences:
-        if exp.company_linkedin_profile_url in company_data:
-            company, ref = company_data[exp.company_linkedin_profile_url]
-            exp.company_data = company
-            exp.company_ref = ref

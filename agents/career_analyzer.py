@@ -2,15 +2,10 @@
 Career analysis functions for LinkedIn profiles.
 """
 
-from typing import List, Set
-from datetime import date
-from datamodels.linkedin import LinkedInProfile, LinkedInCompany
+from typing import List
+from datamodels.linkedin import LinkedInProfile, LinkedInExperience
 from datamodels.career import (
     CareerMetrics,
-    FundingStage,
-    CompanyTier,
-    TechStack,
-    ExperienceStageMetrics,
     TechStackPatterns,
 )
 
@@ -26,232 +21,184 @@ def analyze_career(profile: LinkedInProfile) -> CareerMetrics:
     current_tenure_months = calculate_current_tenure_months(profile.experiences)
 
     # Extract technical information
-    tech_stacks = extract_tech_stacks(profile.experiences)
-    career_tags = generate_career_tags(profile.experiences)
-    exp_by_stage = analyze_company_stages(profile.experiences)
+    # tech_stacks = extract_tech_stacks(profile.experiences)
+    # career_tags = generate_career_tags(profile.experiences, avg_tenure_months)
 
     return CareerMetrics(
         total_experience_months=total_months,
-        total_experience_years=round(total_months / 12, 1),
         average_tenure_months=avg_tenure_months,
-        average_tenure_years=round(avg_tenure_months / 12, 1),
         current_tenure_months=current_tenure_months,
-        current_tenure_years=round(current_tenure_months / 12, 1),
-        tech_stacks=tech_stacks,
-        career_tags=list(career_tags),
-        experience_by_stage=exp_by_stage,
+        tech_stacks=[],
+        career_tags=[],
     )
 
 
-def calculate_total_months(experiences) -> int:
+def is_professional_experience(exp) -> bool:
+    """
+    Determine if an experience is a professional role (excluding internships and education).
+    """
+    if not exp.title:
+        return False
+
+    title_lower = exp.title.lower()
+
+    # Exclude internships and co-ops
+    if any(
+        term in title_lower
+        for term in [
+            "intern",
+            "internship",
+            "co-op",
+            "coop",
+            "trainee",
+            "fellow",
+            "scholar",
+            "student",
+        ]
+    ):
+        return False
+    # Exclude academic/research assistant positions typically held during education
+    if any(
+        term in title_lower
+        for term in ["research assistant", "teaching assistant", "graduate assistant"]
+    ):
+        return False
+
+    return True
+
+
+def calculate_total_months(experiences: List[LinkedInExperience]) -> int:
     """Calculate total months of professional experience."""
-    total_months = 0
-    today = date.today()
-
-    for exp in experiences:
-        if not exp.starts_at:
-            continue
-
-        end_date = exp.ends_at or today
-        months = (end_date.year - exp.starts_at.year) * 12 + (
-            end_date.month - exp.starts_at.month
-        )
-        total_months += max(0, months)
-
-    return total_months
+    return sum(
+        exp.duration_months or 0
+        for exp in experiences
+        if is_professional_experience(exp)
+    )
 
 
-def calculate_average_tenure_months(experiences) -> int:
+def calculate_average_tenure_months(experiences: List[LinkedInExperience]) -> int:
     """Calculate average months spent at each company."""
-    if not experiences:
+    professional_experiences = [
+        exp for exp in experiences if is_professional_experience(exp)
+    ]
+    if not professional_experiences:
         return 0
 
-    tenures = []
-    today = date.today()
-
-    for exp in experiences:
-        if not exp.starts_at:
-            continue
-
-        end_date = exp.ends_at or today
-        months = (end_date.year - exp.starts_at.year) * 12 + (
-            end_date.month - exp.starts_at.month
-        )
-        tenures.append(max(0, months))
-
-    if not tenures:
-        return 0
-
+    tenures = [exp.duration_months or 0 for exp in professional_experiences]
     return round(sum(tenures) / len(tenures))
 
 
-def calculate_current_tenure_months(experiences) -> int:
+def calculate_current_tenure_months(experiences: List[LinkedInExperience]) -> int:
     """Calculate months spent at current company."""
-    current_role = next((exp for exp in experiences if not exp.ends_at), None)
-
-    if not current_role or not current_role.starts_at:
-        return 0
-
-    today = date.today()
-    months = (today.year - current_role.starts_at.year) * 12 + (
-        today.month - current_role.starts_at.month
+    current_role = next(
+        (
+            exp
+            for exp in experiences
+            if not exp.ends_at and is_professional_experience(exp)
+        ),
+        None,
     )
 
-    return max(0, months)
+    return current_role.duration_months if current_role else 0
 
 
-def extract_tech_stacks(experiences) -> List[str]:
-    """Extract technical skills and technologies from experience."""
-    tech_stacks = set()
+# def extract_tech_stacks(experiences: List[LinkedInExperience]) -> List[str]:
+#     """Extract technical skills and technologies from experience."""
+#     tech_stacks = set()
 
-    for exp in experiences:
-        text_to_analyze = []
+#     for exp in experiences:
+#         text_to_analyze = []
 
-        if exp.description:
-            text_to_analyze.append(exp.description)
-        if exp.title:
-            text_to_analyze.append(exp.title)
-        if exp.summarized_job_description:
-            text_to_analyze.append(exp.summarized_job_description.role_summary)
-            text_to_analyze.extend(exp.summarized_job_description.skills)
-            text_to_analyze.extend(exp.summarized_job_description.requirements)
+#         if exp.description:
+#             text_to_analyze.append(exp.description)
+#         if exp.title:
+#             text_to_analyze.append(exp.title)
+#         if exp.summarized_job_description:
+#             text_to_analyze.append(exp.summarized_job_description.role_summary)
+#             text_to_analyze.extend(exp.summarized_job_description.skills)
+#             text_to_analyze.extend(exp.summarized_job_description.requirements)
 
-        combined_text = " ".join(text_to_analyze).lower()
-        detected_stacks = TechStackPatterns.detect_tech_stacks(combined_text)
-        tech_stacks.update(stack.value for stack in detected_stacks)
+#         combined_text = " ".join(text_to_analyze).lower()
+#         detected_stacks = TechStackPatterns.detect_tech_stacks(combined_text)
+#         tech_stacks.update(stack.value for stack in detected_stacks)
 
-    return sorted(list(tech_stacks))
-
-
-def generate_career_tags(experiences) -> Set[str]:
-    """Generate career-related tags based on experience."""
-    tags = set()
-
-    # Analyze titles and roles
-    for exp in experiences:
-        if not exp.title:
-            continue
-
-        title = exp.title.lower()
-
-        # Leadership tags
-        if any(
-            role in title
-            for role in ["lead", "head", "director", "manager", "vp", "chief"]
-        ):
-            tags.add("Leadership Experience")
-
-        # Technical roles
-        if any(role in title for role in ["engineer", "developer", "architect"]):
-            tags.add("Technical")
-        if "senior" in title or "sr" in title:
-            tags.add("Senior Level")
-        if "staff" in title:
-            tags.add("Staff Level")
-
-        # Add tech stack specific tags
-        if exp.summarized_job_description:
-            detected_stacks = TechStackPatterns.detect_tech_stacks(
-                " ".join(
-                    [
-                        exp.summarized_job_description.role_summary,
-                        *exp.summarized_job_description.skills,
-                        *exp.summarized_job_description.requirements,
-                    ]
-                ).lower()
-            )
-            for stack in detected_stacks:
-                tags.add(f"{stack.value} Engineer")
-
-            # Add special combination tags
-            if (
-                TechStack.BACKEND in detected_stacks
-                and TechStack.ML_AI in detected_stacks
-            ):
-                tags.add("ML Systems Engineer")
-            if (
-                TechStack.INFRASTRUCTURE in detected_stacks
-                and TechStack.ML_AI in detected_stacks
-            ):
-                tags.add("MLOps Engineer")
-            if TechStack.DATA in detected_stacks and TechStack.ML_AI in detected_stacks:
-                tags.add("ML Data Engineer")
-
-    return tags
+#     return sorted(list(tech_stacks))
 
 
-def analyze_company_stages(experiences) -> List[ExperienceStageMetrics]:
-    """Analyze experience by company stage."""
-    stage_metrics = []
-    today = date.today()
+# def generate_career_tags(experiences, avg_tenure_months: int) -> Set[str]:
+#     """Generate career-related tags based on experience."""
+#     tags = set()
 
-    for exp in experiences:
-        if not exp.starts_at or not exp.company:
-            continue
+#     # Track companies and titles for promotion analysis
+#     company_titles = {}  # company -> list of titles
+#     company_count = len(
+#         {
+#             exp.company
+#             for exp in experiences
+#             if exp.company and is_professional_experience(exp)
+#         }
+#     )
 
-        funding_stage = FundingStage.UNKNOWN
-        company_tier = CompanyTier.STARTUP
+#     for exp in experiences:
+#         if not exp.title or not is_professional_experience(exp):
+#             continue
 
-        if exp.company_data:
-            funding_stage = determine_funding_stage(exp.company_data)
-            company_tier = determine_company_tier(exp.company_data)
+#         title = exp.title.lower()
 
-        duration_months = ((exp.ends_at or today).year - exp.starts_at.year) * 12 + (
-            (exp.ends_at or today).month - exp.starts_at.month
-        )
+#         # Track titles by company for promotion analysis
+#         if exp.company:
+#             if exp.company not in company_titles:
+#                 company_titles[exp.company] = []
+#             company_titles[exp.company].append(title)
 
-        stage_metrics.append(
-            ExperienceStageMetrics(
-                company_name=exp.company,
-                funding_stage=funding_stage,
-                joined_at=exp.starts_at,
-                left_at=exp.ends_at,
-                duration_months=max(0, duration_months),
-                company_tier=company_tier,
-            )
-        )
+#         # Add tech stack specific tags
+#         if exp.summarized_job_description:
+#             detected_stacks = TechStackPatterns.detect_tech_stacks(
+#                 " ".join(
+#                     [
+#                         exp.summarized_job_description.role_summary,
+#                         *exp.summarized_job_description.skills,
+#                         *exp.summarized_job_description.requirements,
+#                     ]
+#                 ).lower()
+#             )
+#             for stack in detected_stacks:
+#                 tags.add(f"{stack.value} Engineer")
 
-    return stage_metrics
+#             # Add special combination tags
+#             if (
+#                 TechStack.BACKEND in detected_stacks
+#                 and TechStack.ML_AI in detected_stacks
+#             ):
+#                 tags.add("ML Systems Engineer")
+#             if (
+#                 TechStack.INFRASTRUCTURE in detected_stacks
+#                 and TechStack.ML_AI in detected_stacks
+#             ):
+#                 tags.add("MLOps Engineer")
+#             if TechStack.DATA in detected_stacks and TechStack.ML_AI in detected_stacks:
+#                 tags.add("ML Data Engineer")
 
+#     # Career pattern analysis
+#     years_of_experience = sum(calculate_total_months(experiences)) / 12
 
-def determine_funding_stage(company_data: LinkedInCompany) -> FundingStage:
-    """Determine company's funding stage based on available data."""
-    if not company_data.funding_data:
-        return FundingStage.UNKNOWN
+#     # Analyze promotions within companies
+#     for company, titles in company_titles.items():
+#         if len(titles) >= 3:
+#             tags.add("Promoted Multiple Times")
+#         elif len(titles) == 2:
+#             tags.add("Promoted Once")
 
-    latest_funding = company_data.funding_data[-1]
-    funding_type = (
-        latest_funding.funding_type.lower() if latest_funding.funding_type else ""
-    )
+#     # Analyze job hopping and stability patterns
+#     if avg_tenure_months < 18 and company_count >= 3:  # Less than 1.5 years average
+#         tags.add("Frequent Job Changes")
+#     elif avg_tenure_months >= 36:  # 3+ years average tenure
+#         tags.add("High Average Tenure")
 
-    if "ipo" in funding_type:
-        return FundingStage.IPO
-    elif "series d" in funding_type or "series e" in funding_type:
-        return FundingStage.SERIES_D_PLUS
-    elif "series c" in funding_type:
-        return FundingStage.SERIES_C
-    elif "series b" in funding_type:
-        return FundingStage.SERIES_B
-    elif "series a" in funding_type:
-        return FundingStage.SERIES_A
-    elif "seed" in funding_type:
-        return FundingStage.SEED
+#     # Company diversity
+#     if company_count >= 5:
+#         tags.add("Diverse Company Experience")
+#     elif company_count == 1 and years_of_experience >= 5:
+#         tags.add("Single Company Focus")
 
-    return FundingStage.UNKNOWN
-
-
-def determine_company_tier(company_data: LinkedInCompany) -> CompanyTier:
-    """Determine company tier based on size and funding."""
-    if not company_data.company_size:
-        return CompanyTier.STARTUP
-
-    size = company_data.company_size[0] if company_data.company_size[0] else 0
-
-    if size > 10000:
-        return CompanyTier.BIG_TECH
-    elif size > 1000:
-        return CompanyTier.GROWTH
-    elif size > 100:
-        return CompanyTier.ENTERPRISE
-    else:
-        return CompanyTier.STARTUP
+#     return tags
