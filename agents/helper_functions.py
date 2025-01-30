@@ -7,7 +7,7 @@ from agents.prompts import (
     reachout_message_prompt_linkedin,
     reachout_message_prompt_email,
 )
-from services.proxycurl import get_linkedin_profile_with_companies
+from agents.linkedin_processor import get_linkedin_profile_with_companies
 from services.firestore import get_user_templates
 
 
@@ -68,7 +68,7 @@ def get_reachout_message(
     )
 
     # Use provided test template if available, otherwise get user's templates
-    if template_content is not None:
+    if template_content:
         template = template_content
     else:
         template = "No template provided - use default professional recruiting style."

@@ -1,13 +1,12 @@
 from typing import List, Dict, Optional
 import asyncio
 from fastapi import HTTPException, status
-from services.proxycurl import get_linkedin_profile_with_companies
+from agents.linkedin_processor import get_linkedin_profile_with_companies
 import services.firestore as firestore
 from models import KeyTrait, Candidate
 import psutil
 import logging
 from datetime import datetime
-from fastapi.concurrency import run_in_threadpool
 from services.evaluate import run_graph
 from services.firestore import get_custom_instructions
 import re

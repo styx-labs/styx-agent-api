@@ -3,78 +3,17 @@ LinkedIn data models with standardized serialization.
 """
 
 from pydantic import BaseModel
-from typing import List, Optional, Dict, TypeVar, Type
+from typing import List, Optional, Dict, TypeVar, Type, Set
 from datetime import date
-
-T = TypeVar("T", bound="SerializableModel")
-
-
-class SerializableModel(BaseModel):
-    """Base class for models that need Firestore serialization."""
-
-    def dict(self, *args, **kwargs) -> dict:
-        """Convert model to a Firestore-compatible dictionary."""
-        d = super().dict(*args, **kwargs)
-        return self._serialize_dict(d)
-
-    @classmethod
-    def from_dict(cls: Type[T], data: dict) -> Optional[T]:
-        """Create model instance from a Firestore dictionary."""
-        if not data:
-            return None
-        return cls(**cls._deserialize_dict(data))
-
-    @staticmethod
-    def _serialize_dict(d: dict) -> dict:
-        """Recursively serialize dictionary values."""
-        for key, value in d.items():
-            if isinstance(value, date):
-                d[key] = value.isoformat()
-            elif isinstance(value, dict):
-                d[key] = SerializableModel._serialize_dict(value)
-            elif isinstance(value, list):
-                d[key] = [
-                    item.dict()
-                    if isinstance(item, SerializableModel)
-                    else SerializableModel._serialize_dict(item)
-                    if isinstance(item, dict)
-                    else item.isoformat()
-                    if isinstance(item, date)
-                    else item
-                    for item in value
-                ]
-        return d
-
-    @staticmethod
-    def _deserialize_dict(d: dict) -> dict:
-        """Recursively deserialize dictionary values."""
-        for key, value in d.items():
-            if isinstance(value, str):
-                try:
-                    d[key] = date.fromisoformat(value)
-                except ValueError:
-                    pass
-            elif isinstance(value, dict):
-                d[key] = SerializableModel._deserialize_dict(value)
-            elif isinstance(value, list):
-                d[key] = [
-                    SerializableModel._deserialize_dict(item)
-                    if isinstance(item, dict)
-                    else date.fromisoformat(item)
-                    if isinstance(item, str) and SerializableModel._is_iso_date(item)
-                    else item
-                    for item in value
-                ]
-        return d
-
-    @staticmethod
-    def _is_iso_date(value: str) -> bool:
-        """Check if a string is an ISO format date."""
-        try:
-            date.fromisoformat(value)
-            return True
-        except ValueError:
-            return False
+from .base import SerializableModel
+from .career import (
+    CareerMetrics,
+    FundingStage,
+    CompanyTier,
+    TechStack,
+    ExperienceStageMetrics,
+    TechStackPatterns,
+)
 
 
 class CompanyLocation(SerializableModel):
@@ -168,8 +107,15 @@ class LinkedInExperience(SerializableModel):
     location: Optional[str] = None
     company_linkedin_profile_url: Optional[str] = None
     company_data: Optional[LinkedInCompany] = None
-    company_ref: Optional[str] = None  # Firebase reference path
     summarized_job_description: Optional[AILinkedinJobDescription] = None
+
+    def dict(self, *args, **kwargs) -> dict:
+        """Override dict to exclude company_data by default"""
+        exclude = kwargs.get("exclude", set())
+        if "company_data" not in exclude:
+            exclude.add("company_data")
+        kwargs["exclude"] = exclude
+        return super().dict(*args, **kwargs)
 
 
 class LinkedInEducation(SerializableModel):
@@ -190,16 +136,16 @@ class LinkedInProfile(SerializableModel):
     public_identifier: str
     experiences: List[LinkedInExperience] = []
     education: List[LinkedInEducation] = []
+    career_metrics: Optional[CareerMetrics] = None
 
-    def enrich_with_company_data(
-        self, company_data: Dict[str, LinkedInCompany]
-    ) -> None:
-        """Enrich the profile's experiences with company data."""
-        for experience in self.experiences:
-            if experience.company_linkedin_profile_url in company_data:
-                experience.company_data = company_data[
-                    experience.company_linkedin_profile_url
-                ]
+    def analyze_career(self) -> None:
+        """
+        Analyze the profile's career history and compute metrics.
+        This method populates the career_metrics field with computed metrics.
+        """
+        from agents.career_analyzer import analyze_career
+
+        self.career_metrics = analyze_career(self)
 
     def to_context_string(self) -> str:
         """Convert the profile to a formatted string context."""
@@ -265,3 +211,9 @@ class LinkedInProfile(SerializableModel):
                 context += "\n---------\n"
 
         return context
+
+    def dict(self, *args, **kwargs) -> dict:
+        """Override dict to exclude company_data from experiences by default"""
+        exclude = kwargs.get("exclude", set())
+        kwargs["exclude"] = exclude
+        return super().dict(*args, **kwargs)

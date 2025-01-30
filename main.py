@@ -23,8 +23,8 @@ from models import (
 )
 from dotenv import load_dotenv
 from services.get_secret import get_secret
-from services.proxycurl import get_linkedin_profile_with_companies, get_email
-from services.helper_functions import (
+from services.proxycurl import get_email, get_linkedin_profile
+from agents.helper_functions import (
     get_key_traits,
     get_reachout_message,
     get_list_of_profiles,
@@ -354,7 +354,7 @@ def get_job(job_id: str, user_id: str = Depends(validate_user_id)):
 @app.post("/get_linkedin_context")
 def get_linkedin_context_request(url: str, user_id: str = Depends(validate_user_id)):
     try:
-        name, profile, public_identifier = get_linkedin_profile_with_companies(url)
+        name, profile, public_identifier = get_linkedin_profile(url)
         return {
             "name": name,
             "context": profile.to_context_string(),
