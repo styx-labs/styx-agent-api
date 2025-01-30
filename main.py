@@ -23,7 +23,7 @@ from models import (
 )
 from dotenv import load_dotenv
 from services.get_secret import get_secret
-from services.proxycurl import get_linkedin_profile, get_email
+from services.proxycurl import get_linkedin_profile_with_companies, get_email
 from services.helper_functions import (
     get_key_traits,
     get_reachout_message,
@@ -251,18 +251,25 @@ async def create_candidate(
     processor = CandidateProcessor(job_id, job_data, user_id)
     candidate_data = candidate.model_dump()
 
-    candidate_data = await run_in_threadpool(
-        lambda: processor.get_candidate_record(candidate_data)
-    )
-    if not candidate_data:
+    # Get candidate record synchronously
+    try:
+        candidate_data = await run_in_threadpool(
+            processor.get_candidate_record, candidate_data
+        )
+        if not candidate_data:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to fetch LinkedIn profile",
+            )
+
+        # Now we have the complete candidate data, process it in the background
+        background_tasks.add_task(processor.process_single_candidate, candidate_data)
+        return {"message": "Candidate processing started"}
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch LinkedIn profile",
+            detail=f"Error processing candidate: {str(e)}",
         )
-
-    background_tasks.add_task(processor.process_single_candidate, candidate_data)
-
-    return {"message": "Candidate processing started"}
 
 
 @app.post("/jobs/{job_id}/candidates_bulk")
@@ -347,7 +354,7 @@ def get_job(job_id: str, user_id: str = Depends(validate_user_id)):
 @app.post("/get_linkedin_context")
 def get_linkedin_context_request(url: str, user_id: str = Depends(validate_user_id)):
     try:
-        name, profile, public_identifier = get_linkedin_profile(url)
+        name, profile, public_identifier = get_linkedin_profile_with_companies(url)
         return {
             "name": name,
             "context": profile.to_context_string(),
@@ -492,9 +499,6 @@ async def get_evaluation_instructions(
 ):
     """Get user's custom evaluation instructions"""
     return get_custom_instructions(user_id)
-
-
-
 
 
 @app.post("/test-reachout-template")

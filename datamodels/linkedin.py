@@ -1,64 +1,186 @@
 """
-LinkedIn data models.
+LinkedIn data models with standardized serialization.
 """
 
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, TypeVar, Type
 from datetime import date
 
+T = TypeVar("T", bound="SerializableModel")
 
-class AILinkedinJobDescription(BaseModel):
+
+class SerializableModel(BaseModel):
+    """Base class for models that need Firestore serialization."""
+
+    def dict(self, *args, **kwargs) -> dict:
+        """Convert model to a Firestore-compatible dictionary."""
+        d = super().dict(*args, **kwargs)
+        return self._serialize_dict(d)
+
+    @classmethod
+    def from_dict(cls: Type[T], data: dict) -> Optional[T]:
+        """Create model instance from a Firestore dictionary."""
+        if not data:
+            return None
+        return cls(**cls._deserialize_dict(data))
+
+    @staticmethod
+    def _serialize_dict(d: dict) -> dict:
+        """Recursively serialize dictionary values."""
+        for key, value in d.items():
+            if isinstance(value, date):
+                d[key] = value.isoformat()
+            elif isinstance(value, dict):
+                d[key] = SerializableModel._serialize_dict(value)
+            elif isinstance(value, list):
+                d[key] = [
+                    item.dict()
+                    if isinstance(item, SerializableModel)
+                    else SerializableModel._serialize_dict(item)
+                    if isinstance(item, dict)
+                    else item.isoformat()
+                    if isinstance(item, date)
+                    else item
+                    for item in value
+                ]
+        return d
+
+    @staticmethod
+    def _deserialize_dict(d: dict) -> dict:
+        """Recursively deserialize dictionary values."""
+        for key, value in d.items():
+            if isinstance(value, str):
+                try:
+                    d[key] = date.fromisoformat(value)
+                except ValueError:
+                    pass
+            elif isinstance(value, dict):
+                d[key] = SerializableModel._deserialize_dict(value)
+            elif isinstance(value, list):
+                d[key] = [
+                    SerializableModel._deserialize_dict(item)
+                    if isinstance(item, dict)
+                    else date.fromisoformat(item)
+                    if isinstance(item, str) and SerializableModel._is_iso_date(item)
+                    else item
+                    for item in value
+                ]
+        return d
+
+    @staticmethod
+    def _is_iso_date(value: str) -> bool:
+        """Check if a string is an ISO format date."""
+        try:
+            date.fromisoformat(value)
+            return True
+        except ValueError:
+            return False
+
+
+class CompanyLocation(SerializableModel):
+    """Model for company location data."""
+
+    city: Optional[str] = None
+    country: Optional[str] = None
+    is_hq: Optional[bool] = False
+    line_1: Optional[str] = None
+    postal_code: Optional[str] = None
+    state: Optional[str] = None
+
+
+class AffiliatedCompany(SerializableModel):
+    """Model for affiliated company data."""
+
+    industry: Optional[str] = None
+    link: str
+    location: Optional[str] = None
+    name: str
+
+
+class CompanyUpdate(SerializableModel):
+    """Model for company update data."""
+
+    article_link: Optional[str] = None
+    image: Optional[str] = None
+    posted_on: Optional[dict] = None
+    text: Optional[str] = None
+    total_likes: Optional[int] = None
+
+
+class Investor(SerializableModel):
+    """Model for investor data."""
+
+    linkedin_profile_url: Optional[str] = None
+    name: str
+    type: Optional[str] = None
+
+
+class Funding(SerializableModel):
+    """Model for funding round data."""
+
+    funding_type: Optional[str] = None
+    money_raised: Optional[int] = None
+    announced_date: Optional[dict] = None
+    number_of_investors: Optional[int] = None
+    investor_list: List[Investor] = []
+
+
+class LinkedInCompany(SerializableModel):
+    """Model for LinkedIn company profile data from Proxycurl API."""
+
+    company_name: str
+    description: Optional[str] = None
+    website: Optional[str] = None
+    industry: Optional[str] = None
+    company_size: Optional[List[Optional[int]]] = None
+    company_size_on_linkedin: Optional[int] = None
+    company_type: Optional[str] = None
+    founded_year: Optional[int] = None
+    specialties: Optional[List[str]] = []
+    locations: List[CompanyLocation] = []
+    hq: Optional[CompanyLocation] = None
+    follower_count: Optional[int] = None
+    profile_pic_url: Optional[str] = None
+    background_cover_image_url: Optional[str] = None
+    tagline: Optional[str] = None
+    universal_name_id: Optional[str] = None
+    linkedin_internal_id: Optional[str] = None
+    search_id: Optional[str] = None
+    updates: List[CompanyUpdate] = []
+    similar_companies: List[AffiliatedCompany] = []
+    affiliated_companies: List[AffiliatedCompany] = []
+    funding_data: Optional[List[Funding]] = None
+
+
+class AILinkedinJobDescription(SerializableModel):
     role_summary: str
     skills: List[str]
     requirements: List[str]
     sources: List[str]
 
 
-class LinkedInExperience(BaseModel):
+class LinkedInExperience(SerializableModel):
     title: Optional[str] = None
     company: Optional[str] = None
     description: Optional[str] = None
     starts_at: Optional[date] = None
     ends_at: Optional[date] = None
     location: Optional[str] = None
+    company_linkedin_profile_url: Optional[str] = None
+    company_data: Optional[LinkedInCompany] = None
+    company_ref: Optional[str] = None  # Firebase reference path
     summarized_job_description: Optional[AILinkedinJobDescription] = None
 
-    @classmethod
-    def from_dict(cls, data: dict):
-        return cls(
-            title=data["title"],
-            company=data["company"],
-            description=data["description"],
-            starts_at=data["starts_at"],
-            ends_at=data["ends_at"],
-            location=data["location"],
-            summarized_job_description=AILinkedinJobDescription.from_dict(
-                data["summarized_job_description"]
-            )
-            if data["summarized_job_description"]
-            else None,
-        )
 
-
-class LinkedInEducation(BaseModel):
+class LinkedInEducation(SerializableModel):
     school: str
     degree_name: Optional[str] = None
     field_of_study: Optional[str] = None
     starts_at: Optional[date] = None
     ends_at: Optional[date] = None
 
-    @classmethod
-    def from_dict(cls, data: dict):
-        return cls(
-            school=data["school"],
-            degree_name=data["degree_name"],
-            field_of_study=data["field_of_study"],
-            starts_at=data["starts_at"],
-            ends_at=data["ends_at"],
-        )
 
-
-class LinkedInProfile(BaseModel):
+class LinkedInProfile(SerializableModel):
     full_name: str
     occupation: Optional[str] = None
     headline: Optional[str] = None
@@ -69,22 +191,28 @@ class LinkedInProfile(BaseModel):
     experiences: List[LinkedInExperience] = []
     education: List[LinkedInEducation] = []
 
+    def enrich_with_company_data(
+        self, company_data: Dict[str, LinkedInCompany]
+    ) -> None:
+        """Enrich the profile's experiences with company data."""
+        for experience in self.experiences:
+            if experience.company_linkedin_profile_url in company_data:
+                experience.company_data = company_data[
+                    experience.company_linkedin_profile_url
+                ]
+
     def to_context_string(self) -> str:
         """Convert the profile to a formatted string context."""
         context = ""
 
         if self.occupation:
-            context += f"Current Occupation: {self.occupation}\n"
-            context += "\n---------\n"
+            context += f"Current Occupation: {self.occupation}\n\n---------\n"
         if self.headline:
-            context += f"Headline: {self.headline}\n"
-            context += "\n---------\n"
+            context += f"Headline: {self.headline}\n\n---------\n"
         if self.summary:
-            context += f"Summary: {self.summary}\n"
-            context += "\n---------\n"
+            context += f"Summary: {self.summary}\n\n---------\n"
         if self.city and self.country:
-            context += f"Location of this candidate: {self.city}, {self.country}\n"
-            context += "\n---------\n"
+            context += f"Location of this candidate: {self.city}, {self.country}\n\n---------\n"
 
         for exp in self.experiences:
             context += f"Experience: {exp.title} at {exp.company}\n"
@@ -96,6 +224,25 @@ class LinkedInProfile(BaseModel):
             if exp.ends_at:
                 context += f"End Year: {exp.ends_at.year}\n"
                 context += f"End Month: {exp.ends_at.month}\n"
+
+            if exp.company_data:
+                company = exp.company_data
+                context += "\nCompany Information:\n"
+                if company.industry:
+                    context += f"Industry: {company.industry}\n"
+                if company.company_size:
+                    context += f"Company Size: {company.company_size}\n"
+                if company.description:
+                    context += f"Company Description: {company.description}\n"
+                if company.specialties:
+                    context += (
+                        f"Company Specialties: {', '.join(company.specialties)}\n"
+                    )
+                if company.company_type:
+                    context += f"Company Type: {company.company_type}\n"
+                if company.hq:
+                    context += f"Headquarters: {company.hq.city}, {company.hq.state}, {company.hq.country}\n"
+
             if exp.summarized_job_description:
                 context += (
                     f"Role Summary: {exp.summarized_job_description.role_summary}\n"
@@ -118,17 +265,3 @@ class LinkedInProfile(BaseModel):
                 context += "\n---------\n"
 
         return context
-
-    @classmethod
-    def from_dict(cls, data: dict):
-        return cls(
-            full_name=data["full_name"],
-            occupation=data["occupation"],
-            headline=data["headline"],
-            summary=data["summary"],
-            city=data["city"],
-            country=data["country"],
-            public_identifier=data["public_identifier"],
-            experiences=data["experiences"],
-            education=data["education"],
-        )
