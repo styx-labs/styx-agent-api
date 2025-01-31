@@ -10,6 +10,7 @@ from datetime import datetime
 from services.evaluate import run_graph
 from services.firestore import get_custom_instructions
 import re
+from datamodels.linkedin import LinkedInProfile
 
 
 class CandidateProcessor:
@@ -92,8 +93,10 @@ class CandidateProcessor:
                 else "",
             )
 
+            profile = LinkedInProfile(**graph_result["candidate_profile"]).dict()
+
             # Always update candidate data and create in Firestore
-            update_data = {"profile": graph_result["candidate_profile"]}
+            update_data = {"profile": profile}
 
             if candidate_data.get("search_mode", True):
                 # In search mode, update citations and source_str from graph result

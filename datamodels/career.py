@@ -233,6 +233,7 @@ class CareerMetrics(SerializableModel):
     current_tenure_months: int
     tech_stacks: Optional[List[str]] = None
     career_tags: Optional[List[str]] = None
+    experience_tags: Optional[List[str]] = None
 
     def to_dict(self) -> dict:
         """Convert career metrics to a dictionary format."""
@@ -242,4 +243,5 @@ class CareerMetrics(SerializableModel):
             "current_tenure_months": self.current_tenure_months,
             "tech_stacks": self.tech_stacks,
             "career_tags": self.career_tags,
+            "experience_tags": self.experience_tags,
         }
