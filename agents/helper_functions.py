@@ -1,7 +1,6 @@
 from langchain_core.messages import HumanMessage, SystemMessage
 from services.azure_openai import llm
 from langsmith import traceable
-from agents.types import KeyTraitsOutput
 from agents.prompts import (
     key_traits_prompt,
     reachout_message_prompt_linkedin,
@@ -9,6 +8,9 @@ from agents.prompts import (
 )
 from agents.linkedin_processor import get_linkedin_profile_with_companies
 from services.firestore import get_user_templates
+from typing import List
+import services.firestore as firestore
+from models.evaluation import KeyTraitsOutput
 
 
 @traceable(name="get_list_of_profiles")

@@ -3,14 +3,14 @@ import asyncio
 from fastapi import HTTPException, status
 from agents.linkedin_processor import get_linkedin_profile_with_companies
 import services.firestore as firestore
-from models import KeyTrait, Candidate
+from models.base import KeyTrait, Candidate
 import psutil
 import logging
 from datetime import datetime
 from services.evaluate import run_graph
 from services.firestore import get_custom_instructions
 import re
-from datamodels.linkedin import LinkedInProfile
+from models.linkedin import LinkedInProfile
 
 
 class CandidateProcessor:

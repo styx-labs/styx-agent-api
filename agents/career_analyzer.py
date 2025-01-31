@@ -3,8 +3,8 @@ Career analysis functions for LinkedIn profiles.
 """
 
 from typing import List
-from datamodels.linkedin import LinkedInProfile, LinkedInExperience
-from datamodels.career import (
+from models.linkedin import LinkedInProfile, LinkedInExperience
+from models.career import (
     CareerMetrics,
 )
 from .constants import unicorns, big_tech, quant

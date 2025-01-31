@@ -2,6 +2,7 @@ from typing import TypeVar, Type, Optional
 from datetime import date
 from pydantic import BaseModel
 
+
 T = TypeVar("T", bound="SerializableModel")
 
 

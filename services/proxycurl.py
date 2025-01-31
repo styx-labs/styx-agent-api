@@ -1,5 +1,5 @@
 import requests
-from datamodels.linkedin import (
+from models.linkedin import (
     LinkedInProfile,
     LinkedInExperience,
     LinkedInEducation,

@@ -1,5 +1,5 @@
 import re
-from datamodels.linkedin import LinkedInProfile, LinkedInCompany
+from models.linkedin import LinkedInProfile, LinkedInCompany
 from services.proxycurl import get_linkedin_profile, get_company
 from services.firestore import db
 

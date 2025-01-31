@@ -7,9 +7,8 @@ import sys
 from agents.search_credits import free_searches
 from datetime import datetime, timedelta, UTC
 from typing import List, Dict, Optional
-from datamodels.templates import UserTemplates
-from datamodels.instructions import CustomInstructions
-from google.cloud.firestore import DocumentReference
+from models.templates import UserTemplates
+from models.instructions import CustomInstructions
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.azure_openai import get_azure_openai

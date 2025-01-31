@@ -4,7 +4,7 @@ LinkedIn data models with standardized serialization.
 
 from typing import List, Optional
 from datetime import date
-from .base import SerializableModel
+from .serializable import SerializableModel
 from .career import (
     CareerMetrics,
     FundingStage,

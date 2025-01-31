@@ -10,9 +10,8 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 import services.firestore as firestore
-from models import (
-    Job,
-    JobDescription,
+from models.base import Job, JobDescription, KeyTrait
+from models.api import (
     Candidate,
     BulkLinkedInPayload,
     ReachoutPayload,
@@ -43,8 +42,8 @@ from services.firestore import (
     get_custom_instructions,
     set_custom_instructions,
 )
-from datamodels.templates import UserTemplates
-from datamodels.instructions import CustomInstructions
+from models.templates import UserTemplates
+from models.instructions import CustomInstructions
 
 
 load_dotenv()

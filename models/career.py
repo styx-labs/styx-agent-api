@@ -1,7 +1,7 @@
 from typing import List, Set, Optional
 from datetime import date
 from enum import Enum
-from .base import SerializableModel
+from .serializable import SerializableModel
 
 
 # Move all the Enum classes and career analysis related classes here
