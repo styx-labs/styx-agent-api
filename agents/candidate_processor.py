@@ -153,7 +153,7 @@ class CandidateProcessor:
                 detail=f"Error running candidate evaluation: {str(e)}",
             )
 
-    def get_candidate_record(self, candidate_data: Dict) -> Optional[Dict]:
+    async def get_candidate_record(self, candidate_data: Dict) -> Optional[Dict]:
         """Get candidate record from LinkedIn URL with enriched company data."""
         try:
             public_id = self._extract_linkedin_id(candidate_data["url"])
@@ -167,6 +167,7 @@ class CandidateProcessor:
             if firestore.check_cached_candidate_exists(public_id):
                 cached_candidate = firestore.get_cached_candidate(public_id)
                 # Use cached data but preserve search_mode from request
+                search_mode = candidate_data.get("search_mode", True)
                 candidate_data.update(
                     {
                         "context": cached_candidate["context"],
@@ -176,33 +177,20 @@ class CandidateProcessor:
                         "source_str": cached_candidate["source_str"],
                         "citations": cached_candidate["citations"],
                         "cached": True,
+                        "search_mode": search_mode,
                     }
                 )
                 return candidate_data
 
             # Only call ProxyCurl if not cached
-            full_name, profile, public_id = get_linkedin_profile_with_companies(
+            full_name, profile, public_id = await get_linkedin_profile_with_companies(
                 candidate_data["url"]
             )
             if not profile:
                 return None
 
-            if firestore.check_cached_candidate_exists(public_id):
-                cached_candidate = firestore.get_cached_candidate(public_id)
-                # Use cached data but preserve search_mode from request
-                candidate_data.update(
-                    {
-                        "context": cached_candidate["context"],
-                        "name": cached_candidate["name"],
-                        "profile": cached_candidate["profile"],
-                        "public_identifier": public_id,
-                        "source_str": cached_candidate["source_str"],
-                        "citations": cached_candidate["citations"],
-                        "cached": True,
-                    }
-                )
-                return candidate_data
-
+            # Preserve search_mode when updating data
+            search_mode = candidate_data.get("search_mode", True)
             candidate_data.update(
                 {
                     "context": profile.to_context_string(),
@@ -210,6 +198,7 @@ class CandidateProcessor:
                     "profile": profile,
                     "public_identifier": public_id,
                     "cached": False,
+                    "search_mode": search_mode,
                 }
             )
             return candidate_data
@@ -224,14 +213,15 @@ class CandidateProcessor:
 
             dummy_id = self.create_dummy_candidate(len(urls))
 
-            candidates = []
-
             # Process URLs concurrently
             tasks = []
             for url in urls:
                 candidate_data = Candidate(
                     url=url, search_mode=search_mode
                 ).model_dump()
+                candidate_data["search_mode"] = (
+                    search_mode  # Ensure search_mode is passed through
+                )
                 tasks.append(self.get_candidate_record(candidate_data))
 
             # Wait for all candidate records to be fetched

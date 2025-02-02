@@ -33,7 +33,6 @@ from agents.candidate_processor import CandidateProcessor
 from services.stripe import create_checkout_session
 import logging
 import sys
-from fastapi.concurrency import run_in_threadpool
 import stripe
 from typing import Optional, List
 from services.firestore import (
@@ -248,27 +247,9 @@ async def create_candidate(
         )
 
     processor = CandidateProcessor(job_id, job_data, user_id)
-    candidate_data = candidate.model_dump()
 
-    # Get candidate record synchronously
-    try:
-        candidate_data = await run_in_threadpool(
-            processor.get_candidate_record, candidate_data
-        )
-        if not candidate_data:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Failed to fetch LinkedIn profile",
-            )
-
-        # Now we have the complete candidate data, process it in the background
-        background_tasks.add_task(processor.process_single_candidate, candidate_data)
-        return {"message": "Candidate processing started"}
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Error processing candidate: {str(e)}",
-        )
+    background_tasks.add_task(processor.process_urls, [candidate.url])
+    return {"message": "Candidate processing started"}
 
 
 @app.post("/jobs/{job_id}/candidates_bulk")
@@ -392,7 +373,8 @@ def get_search_credits(user_id: str = Depends(validate_user_id)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving search credits: {str(e)}",
         )
-    
+
+
 @app.get("/show-popup")
 def show_popup(user_id: str = Depends(validate_user_id)):
     try:
