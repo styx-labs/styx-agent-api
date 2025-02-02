@@ -2,6 +2,7 @@
 LinkedIn data models with standardized serialization.
 """
 
+import re
 from typing import List, Optional
 from datetime import date
 from .serializable import SerializableModel
@@ -286,6 +287,36 @@ class LinkedInEducation(SerializableModel):
     field_of_study: Optional[str] = None
     starts_at: Optional[date] = None
     ends_at: Optional[date] = None
+    school_linkedin_profile_url: Optional[str] = None
+    logo_url: Optional[str] = None
+
+    @property
+    def school_id(self) -> str:
+        """Get the LinkedIn school ID."""
+        from agents.constants import extract_school_id
+
+        if "school" not in self.school_linkedin_profile_url:
+            if self.logo_url:
+                match = re.search(r"/proxycurl/company/([^/]+)/", self.logo_url)
+                return match.group(1) if match else None
+            return None
+        return extract_school_id(self.school_linkedin_profile_url)
+
+    @property
+    def university_tier(self) -> str:
+        """Get the ranking tier of the university."""
+        from agents.constants import get_university_tier_by_id
+
+        if not self.school_id:
+            return "other"
+        return get_university_tier_by_id(self.school_id)
+
+    def dict(self, *args, **kwargs) -> dict:
+        """Override dict to include calculated fields."""
+        d = super().dict(*args, **kwargs)
+        d["university_tier"] = self.university_tier
+        d["school_id"] = self.school_id
+        return d
 
 
 class LinkedInProfile(SerializableModel):
@@ -381,5 +412,6 @@ class LinkedInProfile(SerializableModel):
 
         # Manually serialize experiences to ensure their custom dict() method is called
         d["experiences"] = [exp.dict(*args, **kwargs) for exp in self.experiences]
+        d["education"] = [edu.dict(*args, **kwargs) for edu in self.education]
 
         return d

@@ -85,17 +85,17 @@ def is_professional_experience(
     if "school" in exp.company_linkedin_profile_url:
         return False
 
-    # Check if experience overlaps with any education period
-    for edu in education:
-        if not edu.starts_at or not exp.starts_at:
-            continue
+    # # Check if experience overlaps with any education period
+    # for edu in education:
+    #     if not edu.starts_at or not exp.starts_at:
+    #         continue
 
-        edu_end = edu.ends_at or edu.starts_at
-        exp_end = exp.ends_at or exp.starts_at
+    #     edu_end = edu.ends_at or edu.starts_at
+    #     exp_end = exp.ends_at or exp.starts_at
 
-        # Check for overlap between education and experience periods
-        if exp.starts_at <= edu_end and exp_end >= edu.starts_at:
-            return False
+    #     # Check for overlap between education and experience periods
+    #     if exp.starts_at <= edu_end and exp_end >= edu.starts_at:
+    #         return False
 
     return True
 

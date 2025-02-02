@@ -67,6 +67,10 @@ async def get_linkedin_profile(url: str) -> tuple[str, LinkedInProfile, str]:
                         field_of_study=edu["field_of_study"],
                         starts_at=convert_date_dict(edu.get("starts_at")),
                         ends_at=convert_date_dict(edu.get("ends_at")),
+                        school_linkedin_profile_url=edu.get(
+                            "school_linkedin_profile_url"
+                        ),
+                        logo_url=edu.get("logo_url"),
                     )
                     for edu in data.get("education", [])
                     if all(

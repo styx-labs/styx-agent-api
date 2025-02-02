@@ -1,3 +1,78 @@
+from typing import Dict
+
+# University rankings based on LinkedIn school IDs
+UNIVERSITY_RANKINGS_BY_ID: Dict[str, str] = {
+    # Top 5
+    "princeton-university": "top_5",
+    "mit": "top_5",
+    "harvard-university": "top_5",
+    "stanford-university": "top_5",
+    "yale-university": "top_5",
+    # Top 10 (excluding top 5)
+    "california-institute-of-technology": "top_10",
+    "duke-university": "top_10",
+    "johns-hopkins-university": "top_10",
+    "northwestern-university": "top_10",
+    "university-of-pennsylvania": "top_10",
+    # Top 20 (excluding top 10)
+    "cornell-university": "top_20",
+    "uchicago": "top_20",
+    "brown-university": "top_20",
+    "columbia-university": "top_20",
+    "dartmouth-college": "top_20",
+    "ucla": "top_20",
+    "uc-berkeley": "top_20",
+    "riceuniversity": "top_20",
+    "university-of-notre-dame": "top_20",
+    "vanderbilt-university": "top_20",
+    # Top 50 (excluding top 20)
+    "carnegie-mellon-university": "top_50",
+    "university-of-michigan": "top_50",
+    "washington-university-in-st-louis": "top_50",
+    "emory-university": "top_50",
+    "georgetown-university": "top_50",
+    "university-of-virginia": "top_50",
+    "university-of-north-carolina-at-chapel-hill": "top_50",
+    "university-of-southern-california": "top_50",
+    "ucsandiego": "top_50",
+    "new-york-university": "top_50",
+    "uflorida": "top_50",
+    "theuniversityoftexasataustin-": "top_50",
+    "georgia-institute-of-technology": "top_50",
+    "uc-davis": "top_50",
+    "university-of-california-irvine": "top_50",
+    "university-of-illinois-urbana-champaign": "top_50",
+    "boston-college": "top_50",
+    "tufts-university": "top_50",
+    "ucsantabarbara": "top_50",
+    "university-of-wisconsin-madison": "top_50",
+    "boston-university": "top_50",
+    "the-ohio-state-university": "top_50",
+    "rutgersu": "top_50",
+    "university-of-maryland": "top_50",
+    "university-of-rochester": "top_50",
+    "lehigh-university": "top_50",
+    "purdue-university": "top_50",
+    "university-of-georgia": "top_50",
+    "university-of-washington": "top_50",
+    "wake-forest-university": "top_50",
+}
+
+
+def extract_school_id(url: str) -> str:
+    """Extract the school ID from a LinkedIn school URL."""
+    if not url:
+        return ""
+    # Handle both full URLs and relative paths
+    parts = url.rstrip("/").split("/school/")
+    return parts[-1] if len(parts) > 1 else ""
+
+
+def get_university_tier_by_id(id: str) -> str:
+    """Get the ranking tier of a university based on its LinkedIn URL."""
+    return UNIVERSITY_RANKINGS_BY_ID.get(id, "other")
+
+
 big_tech = [
     "Google",
     "Apple",
