@@ -11,6 +11,7 @@ from services.evaluate import run_graph
 from services.firestore import get_custom_instructions
 import re
 from models.linkedin import LinkedInProfile
+import uuid
 
 
 class CandidateProcessor:
@@ -186,6 +187,22 @@ class CandidateProcessor:
             if not profile:
                 return None
 
+            if firestore.check_cached_candidate_exists(public_id):
+                cached_candidate = firestore.get_cached_candidate(public_id)
+                # Use cached data but preserve search_mode from request
+                candidate_data.update(
+                    {
+                        "context": cached_candidate["context"],
+                        "name": cached_candidate["name"],
+                        "profile": cached_candidate["profile"],
+                        "public_identifier": public_id,
+                        "source_str": cached_candidate["source_str"],
+                        "citations": cached_candidate["citations"],
+                        "cached": True,
+                    }
+                )
+                return candidate_data
+
             candidate_data.update(
                 {
                     "context": profile.to_context_string(),
@@ -204,6 +221,9 @@ class CandidateProcessor:
         """Process a list of LinkedIn URLs in bulk."""
         try:
             logging.info(f"Processing {len(urls)} LinkedIn URLs")
+
+            dummy_id = self.create_dummy_candidate(len(urls))
+
             candidates = []
 
             # Process URLs concurrently
@@ -230,9 +250,26 @@ class CandidateProcessor:
 
         except Exception as e:
             logging.error(str(e))
+        finally:
+            firestore.delete_candidate(dummy_id)
+            firestore.remove_candidate_from_job(self.job_id, dummy_id, self.user_id)
 
     async def reevaluate_candidates(self):
         """Reevaluate all candidates for a job"""
         candidates = firestore.get_candidates(self.job_id, self.user_id)
         tasks = [self.process_single_candidate(candidate) for candidate in candidates]
         await asyncio.gather(*tasks)
+
+    def create_dummy_candidate(self, num_urls: int) -> str:
+        id = str(uuid.uuid4())
+        firestore.create_candidate({"public_identifier": id})
+        firestore.add_candidate_to_job(
+            self.job_id,
+            id,
+            self.user_id,
+            {
+                "status": "processing",
+                "name": f"Loading {num_urls} candidates...",
+            },
+        )
+        return id
