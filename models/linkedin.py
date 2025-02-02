@@ -156,18 +156,45 @@ class LinkedInCompany(SerializableModel):
         return current_stage
 
     def get_funding_stages_between_dates(
-        self, start_date: date, end_date: date = None
+        self, start_date: date, end_date: date = None, cutoff_date: date = None
     ) -> List[FundingStage]:
-        """Get the sequence of funding stages between two dates."""
+        """Get the sequence of funding stages between two dates.
+
+        Args:
+            start_date: Start date of the period
+            end_date: End date of the period (defaults to today)
+            cutoff_date: Optional date before which to ignore funding rounds
+        """
         if not self.funding_data:
             return [FundingStage.UNKNOWN]
 
         end_date = end_date or date.today()
         relevant_rounds = []
+
+        # Filter funding data by cutoff date if provided
+        valid_funding = [
+            f
+            for f in self.funding_data
+            if f.announced_date
+            and (
+                not cutoff_date
+                or date(
+                    year=f.announced_date.get("year", 1900),
+                    month=f.announced_date.get("month", 1),
+                    day=1,
+                )
+                >= cutoff_date
+            )
+        ]
+
+        if not valid_funding:
+            return [FundingStage.UNKNOWN]
+
+        # Get initial stage from valid funding rounds
         current_stage = self.get_funding_stage_at_date(start_date)
 
         for funding in sorted(
-            [f for f in self.funding_data if f.announced_date],
+            valid_funding,
             key=lambda x: x.announced_date.get("year", 0) * 12
             + x.announced_date.get("month", 0),
         ):
@@ -213,8 +240,13 @@ class LinkedInExperience(SerializableModel):
         if not self.company_data or not self.starts_at:
             return [FundingStage.UNKNOWN]
 
+        # Calculate cutoff date (2 years before start date)
+        two_years_before = date(
+            year=self.starts_at.year - 2, month=self.starts_at.month, day=1
+        )
+
         return self.company_data.get_funding_stages_between_dates(
-            self.starts_at, self.ends_at
+            self.starts_at, self.ends_at, cutoff_date=two_years_before
         )
 
     @property

@@ -3,7 +3,7 @@ Career analysis functions for LinkedIn profiles.
 """
 
 from typing import List
-from models.linkedin import LinkedInProfile, LinkedInExperience
+from models.linkedin import LinkedInProfile, LinkedInExperience, LinkedInEducation
 from models.career import (
     CareerMetrics,
 )
@@ -15,18 +15,27 @@ def analyze_career(profile: LinkedInProfile) -> CareerMetrics:
     Analyze a LinkedIn profile and compute career metrics.
     Returns a CareerMetrics object containing the analysis.
     """
+    # Filter professional experiences once
+    professional_experiences = [
+        exp
+        for exp in profile.experiences
+        if is_professional_experience(exp, profile.education)
+    ]
+
     # Calculate basic metrics in months
-    total_months = calculate_total_months(profile.experiences)
-    avg_tenure_months = calculate_average_tenure_months(profile.experiences)
-    current_tenure_months = calculate_current_tenure_months(profile.experiences)
+    total_months = calculate_total_months(professional_experiences)
+    avg_tenure_months = calculate_average_tenure_months(professional_experiences)
+    current_tenure_months = calculate_current_tenure_months(professional_experiences)
 
     # Generate career tags
     career_tags = []
-    career_tags.extend(generate_tenure_tags(profile.experiences, avg_tenure_months))
-    career_tags.extend(generate_promotion_tags(profile.experiences))
+    career_tags.extend(
+        generate_tenure_tags(professional_experiences, avg_tenure_months)
+    )
+    career_tags.extend(generate_promotion_tags(professional_experiences))
 
     # Generate experience tags
-    experience_tags = generate_experience_tags(profile.experiences)
+    experience_tags = generate_experience_tags(professional_experiences)
 
     return CareerMetrics(
         total_experience_months=total_months,
@@ -38,9 +47,12 @@ def analyze_career(profile: LinkedInProfile) -> CareerMetrics:
     )
 
 
-def is_professional_experience(exp: LinkedInExperience) -> bool:
+def is_professional_experience(
+    exp: LinkedInExperience, education: List[LinkedInEducation]
+) -> bool:
     """
-    Determine if an experience is a professional role (excluding internships and education).
+    Determine if an experience is a professional role (excluding internships, education,
+    and any experience that overlaps with education periods).
     """
     if not exp.title:
         return False
@@ -73,23 +85,36 @@ def is_professional_experience(exp: LinkedInExperience) -> bool:
     if "school" in exp.company_linkedin_profile_url:
         return False
 
+    # Check if experience overlaps with any education period
+    for edu in education:
+        if not edu.starts_at or not exp.starts_at:
+            continue
+
+        edu_end = edu.ends_at or edu.starts_at
+        exp_end = exp.ends_at or exp.starts_at
+
+        # Check for overlap between education and experience periods
+        if exp.starts_at <= edu_end and exp_end >= edu.starts_at:
+            return False
+
     return True
 
 
-def calculate_total_months(experiences: List[LinkedInExperience]) -> int:
+def calculate_total_months(professional_experiences: List[LinkedInExperience]) -> int:
     """
     Calculate total months of professional experience, accounting for overlapping roles.
     Returns the number of unique months worked across all professional experiences.
     """
-    # Filter for professional experiences and sort by start date
-    professional_experiences = [
-        exp for exp in experiences if is_professional_experience(exp) and exp.starts_at
-    ]
     if not professional_experiences:
         return 0
 
     # Sort experiences by start date
-    sorted_experiences = sorted(professional_experiences, key=lambda x: x.starts_at)
+    sorted_experiences = sorted(
+        [exp for exp in professional_experiences if exp.starts_at],
+        key=lambda x: x.starts_at,
+    )
+    if not sorted_experiences:
+        return 0
 
     total_months = 0
     current_period_start = sorted_experiences[0].starts_at
@@ -122,11 +147,10 @@ def calculate_total_months(experiences: List[LinkedInExperience]) -> int:
     return total_months
 
 
-def calculate_average_tenure_months(experiences: List[LinkedInExperience]) -> int:
+def calculate_average_tenure_months(
+    professional_experiences: List[LinkedInExperience],
+) -> int:
     """Calculate average months spent at each company."""
-    professional_experiences = [
-        exp for exp in experiences if is_professional_experience(exp)
-    ]
     if not professional_experiences:
         return 0
 
@@ -134,14 +158,12 @@ def calculate_average_tenure_months(experiences: List[LinkedInExperience]) -> in
     return round(sum(tenures) / len(tenures))
 
 
-def calculate_current_tenure_months(experiences: List[LinkedInExperience]) -> int:
+def calculate_current_tenure_months(
+    professional_experiences: List[LinkedInExperience],
+) -> int:
     """Calculate months spent at current company."""
     current_role = next(
-        (
-            exp
-            for exp in experiences
-            if not exp.ends_at and is_professional_experience(exp)
-        ),
+        (exp for exp in professional_experiences if not exp.ends_at),
         None,
     )
 
@@ -149,22 +171,19 @@ def calculate_current_tenure_months(experiences: List[LinkedInExperience]) -> in
 
 
 def generate_tenure_tags(
-    experiences: List[LinkedInExperience], avg_tenure_months: int
+    professional_experiences: List[LinkedInExperience], avg_tenure_months: int
 ) -> List[str]:
     """Generate tags based on tenure patterns and company diversity."""
     tags = []
 
     # Count professional positions and unique companies
-    professional_experiences = [
-        exp for exp in experiences if is_professional_experience(exp)
-    ]
     professional_positions = len(professional_experiences)
     company_count = len(
         {exp.company for exp in professional_experiences if exp.company}
     )
 
     # Calculate total years of experience
-    total_months = calculate_total_months(experiences)
+    total_months = calculate_total_months(professional_experiences)
     years_of_experience = total_months / 12
 
     # Analyze tenure patterns
@@ -182,14 +201,16 @@ def generate_tenure_tags(
     return tags
 
 
-def generate_promotion_tags(experiences: List[LinkedInExperience]) -> List[str]:
+def generate_promotion_tags(
+    professional_experiences: List[LinkedInExperience],
+) -> List[str]:
     """Generate tags based on promotion patterns within companies."""
     tags = []
 
     # Track titles by company
     company_titles = {}
-    for exp in experiences:
-        if not exp.company or not is_professional_experience(exp):
+    for exp in professional_experiences:
+        if not exp.company:
             continue
 
         if exp.company not in company_titles:
@@ -208,17 +229,15 @@ def generate_promotion_tags(experiences: List[LinkedInExperience]) -> List[str]:
     return tags
 
 
-def generate_experience_tags(experiences: List[LinkedInExperience]) -> List[str]:
+def generate_experience_tags(
+    professional_experiences: List[LinkedInExperience],
+) -> List[str]:
     """Generate tags based on company types and stages."""
     tags = set()
-
-    # Predefined lists (these should be moved to a config file or database)
-
-    # Track unique companies to avoid duplicate tags
     companies_seen = set()
 
-    for exp in experiences:
-        if not exp.company or not is_professional_experience(exp):
+    for exp in professional_experiences:
+        if not exp.company:
             continue
 
         company = exp.company.strip()
