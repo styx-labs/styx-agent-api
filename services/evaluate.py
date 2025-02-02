@@ -1,11 +1,11 @@
 from langserve import RemoteRunnable
-from agents.types import (
+from models.evaluation import (
     EvaluationInputState,
     EvaluationOutputState,
     CachedEvaluationInputState,
 )
 import os
-from datamodels.linkedin import LinkedInProfile
+from models.linkedin import LinkedInProfile
 
 
 async def run_graph(

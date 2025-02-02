@@ -10,9 +10,8 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 import services.firestore as firestore
-from models import (
-    Job,
-    JobDescription,
+from models.base import Job, JobDescription, KeyTrait
+from models.api import (
     Candidate,
     BulkLinkedInPayload,
     ReachoutPayload,
@@ -23,8 +22,8 @@ from models import (
 )
 from dotenv import load_dotenv
 from services.get_secret import get_secret
-from services.proxycurl import get_linkedin_profile, get_email
-from services.helper_functions import (
+from services.proxycurl import get_email, get_linkedin_profile
+from agents.helper_functions import (
     get_key_traits,
     get_reachout_message,
     get_list_of_profiles,
@@ -34,7 +33,6 @@ from agents.candidate_processor import CandidateProcessor
 from services.stripe import create_checkout_session
 import logging
 import sys
-from fastapi.concurrency import run_in_threadpool
 import stripe
 from typing import Optional, List
 from services.firestore import (
@@ -43,8 +41,8 @@ from services.firestore import (
     get_custom_instructions,
     set_custom_instructions,
 )
-from datamodels.templates import UserTemplates
-from datamodels.instructions import CustomInstructions
+from models.templates import UserTemplates
+from models.instructions import CustomInstructions
 
 
 load_dotenv()
@@ -249,19 +247,8 @@ async def create_candidate(
         )
 
     processor = CandidateProcessor(job_id, job_data, user_id)
-    candidate_data = candidate.model_dump()
 
-    candidate_data = await run_in_threadpool(
-        lambda: processor.get_candidate_record(candidate_data)
-    )
-    if not candidate_data:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch LinkedIn profile",
-        )
-
-    background_tasks.add_task(processor.process_single_candidate, candidate_data)
-
+    background_tasks.add_task(processor.process_urls, [candidate.url])
     return {"message": "Candidate processing started"}
 
 
@@ -386,7 +373,8 @@ def get_search_credits(user_id: str = Depends(validate_user_id)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving search credits: {str(e)}",
         )
-    
+
+
 @app.get("/show-popup")
 def show_popup(user_id: str = Depends(validate_user_id)):
     try:
@@ -517,9 +505,6 @@ async def get_evaluation_instructions(
 ):
     """Get user's custom evaluation instructions"""
     return get_custom_instructions(user_id)
-
-
-
 
 
 @app.post("/test-reachout-template")

@@ -1,17 +1,18 @@
 from typing import List, Dict, Optional
 import asyncio
 from fastapi import HTTPException, status
-from services.proxycurl import get_linkedin_profile
+from agents.linkedin_processor import get_linkedin_profile_with_companies
 import services.firestore as firestore
-from models import KeyTrait, Candidate
+from models.base import KeyTrait, Candidate
 import psutil
 import logging
 from datetime import datetime
-from fastapi.concurrency import run_in_threadpool
 from services.evaluate import run_graph
 from services.firestore import get_custom_instructions
 import re
+from models.linkedin import LinkedInProfile
 import uuid
+
 
 class CandidateProcessor:
     def __init__(self, job_id: str, job_data: dict, user_id: str):
@@ -86,11 +87,17 @@ class CandidateProcessor:
                 cached=candidate_data.get("cached", False),
                 citations=candidate_data.get("citations"),
                 source_str=candidate_data.get("source_str"),
-                custom_instructions=get_custom_instructions(self.user_id).evaluation_instructions,
+                custom_instructions=get_custom_instructions(
+                    self.user_id
+                ).evaluation_instructions
+                if get_custom_instructions(self.user_id)
+                else "",
             )
 
+            profile = LinkedInProfile(**graph_result["candidate_profile"]).dict()
+
             # Always update candidate data and create in Firestore
-            update_data = {"profile": graph_result["candidate_profile"]}
+            update_data = {"profile": profile}
 
             if candidate_data.get("search_mode", True):
                 # In search mode, update citations and source_str from graph result
@@ -146,8 +153,8 @@ class CandidateProcessor:
                 detail=f"Error running candidate evaluation: {str(e)}",
             )
 
-    def get_candidate_record(self, candidate_data: Dict) -> Optional[Dict]:
-        """Get candidate record from LinkedIn URL."""
+    async def get_candidate_record(self, candidate_data: Dict) -> Optional[Dict]:
+        """Get candidate record from LinkedIn URL with enriched company data."""
         try:
             public_id = self._extract_linkedin_id(candidate_data["url"])
             if not public_id:
@@ -160,6 +167,7 @@ class CandidateProcessor:
             if firestore.check_cached_candidate_exists(public_id):
                 cached_candidate = firestore.get_cached_candidate(public_id)
                 # Use cached data but preserve search_mode from request
+                search_mode = candidate_data.get("search_mode", True)
                 candidate_data.update(
                     {
                         "context": cached_candidate["context"],
@@ -169,31 +177,20 @@ class CandidateProcessor:
                         "source_str": cached_candidate["source_str"],
                         "citations": cached_candidate["citations"],
                         "cached": True,
+                        "search_mode": search_mode,
                     }
                 )
                 return candidate_data
 
             # Only call ProxyCurl if not cached
-            full_name, profile, public_id = get_linkedin_profile(candidate_data["url"])
+            full_name, profile, public_id = await get_linkedin_profile_with_companies(
+                candidate_data["url"]
+            )
             if not profile:
                 return None
-            
-            if firestore.check_cached_candidate_exists(public_id):
-                cached_candidate = firestore.get_cached_candidate(public_id)
-                # Use cached data but preserve search_mode from request
-                candidate_data.update(
-                    {
-                        "context": cached_candidate["context"],
-                        "name": cached_candidate["name"],
-                        "profile": cached_candidate["profile"],
-                        "public_identifier": public_id,
-                        "source_str": cached_candidate["source_str"],
-                        "citations": cached_candidate["citations"],
-                        "cached": True,
-                    }
-                )
-                return candidate_data
 
+            # Preserve search_mode when updating data
+            search_mode = candidate_data.get("search_mode", True)
             candidate_data.update(
                 {
                     "context": profile.to_context_string(),
@@ -201,11 +198,12 @@ class CandidateProcessor:
                     "profile": profile,
                     "public_identifier": public_id,
                     "cached": False,
+                    "search_mode": search_mode,
                 }
             )
             return candidate_data
         except Exception as e:
-            print(str(e))
+            print(f"Error getting candidate record: {str(e)}")
             return None
 
     async def process_urls(self, urls: List[str], search_mode: bool = True) -> None:
@@ -215,33 +213,36 @@ class CandidateProcessor:
 
             dummy_id = self.create_dummy_candidate(len(urls))
 
-            candidates = []
+            # Process URLs concurrently
+            tasks = []
             for url in urls:
                 candidate_data = Candidate(
                     url=url, search_mode=search_mode
                 ).model_dump()
-
-                candidate_data = await run_in_threadpool(
-                    lambda: self.get_candidate_record(candidate_data)
+                candidate_data["search_mode"] = (
+                    search_mode  # Ensure search_mode is passed through
                 )
-                if not candidate_data:
-                    logging.error(f"Failed to fetch LinkedIn profile for {url}")
-                    continue
+                tasks.append(self.get_candidate_record(candidate_data))
 
-                candidates.append(candidate_data)
+            # Wait for all candidate records to be fetched
+            candidate_results = await asyncio.gather(*tasks)
+
+            # Filter out failed fetches
+            candidates = [c for c in candidate_results if c is not None]
 
             logging.info(f"Successfully fetched {len(candidates)} profiles")
-            tasks = [
+
+            # Process candidates concurrently
+            eval_tasks = [
                 self.process_single_candidate(candidate) for candidate in candidates
             ]
-            await asyncio.gather(*tasks)
+            await asyncio.gather(*eval_tasks)
+
         except Exception as e:
             logging.error(str(e))
         finally:
             firestore.delete_candidate(dummy_id)
-            firestore.remove_candidate_from_job(
-                self.job_id, dummy_id, self.user_id
-            )
+            firestore.remove_candidate_from_job(self.job_id, dummy_id, self.user_id)
 
     async def reevaluate_candidates(self):
         """Reevaluate all candidates for a job"""

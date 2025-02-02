@@ -1,14 +1,16 @@
 from langchain_core.messages import HumanMessage, SystemMessage
 from services.azure_openai import llm
 from langsmith import traceable
-from agents.types import KeyTraitsOutput
 from agents.prompts import (
     key_traits_prompt,
     reachout_message_prompt_linkedin,
     reachout_message_prompt_email,
 )
-from services.proxycurl import get_linkedin_profile
+from agents.linkedin_processor import get_linkedin_profile_with_companies
 from services.firestore import get_user_templates
+from typing import List
+import services.firestore as firestore
+from models.evaluation import KeyTraitsOutput
 
 
 @traceable(name="get_list_of_profiles")
@@ -16,7 +18,7 @@ def get_list_of_profiles(ideal_profile_urls: list[str]) -> list[str]:
     if ideal_profile_urls:
         ideal_profiles = []
         for url in ideal_profile_urls:
-            _, profile, _ = get_linkedin_profile(url)
+            _, profile, _ = get_linkedin_profile_with_companies(url)
             ideal_profiles.append(profile.to_context_string())
         return ideal_profiles
     return []
@@ -68,7 +70,7 @@ def get_reachout_message(
     )
 
     # Use provided test template if available, otherwise get user's templates
-    if template_content is not None:
+    if template_content:
         template = template_content
     else:
         template = "No template provided - use default professional recruiting style."
