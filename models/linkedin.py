@@ -282,7 +282,7 @@ class LinkedInExperience(SerializableModel):
 
 
 class LinkedInEducation(SerializableModel):
-    school: str
+    school: Optional[str] = None
     degree_name: Optional[str] = None
     field_of_study: Optional[str] = None
     starts_at: Optional[date] = None
@@ -291,11 +291,14 @@ class LinkedInEducation(SerializableModel):
     logo_url: Optional[str] = None
 
     @property
-    def school_id(self) -> str:
+    def school_id(self) -> Optional[str]:
         """Get the LinkedIn school ID."""
         from agents.constants import extract_school_id
 
-        if "school" not in self.school_linkedin_profile_url:
+        if (
+            self.school_linkedin_profile_url
+            and "school" not in self.school_linkedin_profile_url
+        ):
             if self.logo_url:
                 match = re.search(r"/proxycurl/company/([^/]+)/", self.logo_url)
                 return match.group(1) if match else None
@@ -303,7 +306,7 @@ class LinkedInEducation(SerializableModel):
         return extract_school_id(self.school_linkedin_profile_url)
 
     @property
-    def university_tier(self) -> str:
+    def university_tier(self) -> Optional[str]:
         """Get the ranking tier of the university."""
         from agents.constants import get_university_tier_by_id
 

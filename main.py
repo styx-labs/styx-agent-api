@@ -102,9 +102,7 @@ async def get_key_traits_request(
 ):
     try:
         ideal_profiles = await get_list_of_profiles(job_description.ideal_profile_urls)
-        key_traits_output = await get_key_traits(
-            job_description.description, ideal_profiles
-        )
+        key_traits_output = get_key_traits(job_description.description, ideal_profiles)
         key_traits_output = key_traits_output.model_dump()
         key_traits_output["ideal_profiles"] = ideal_profiles
         return key_traits_output
