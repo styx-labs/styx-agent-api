@@ -82,7 +82,10 @@ def is_professional_experience(
     ):
         return False
 
-    if "school" in exp.company_linkedin_profile_url:
+    if (
+        exp.company_linkedin_profile_url
+        and "school" in exp.company_linkedin_profile_url
+    ):
         return False
 
     # # Check if experience overlaps with any education period

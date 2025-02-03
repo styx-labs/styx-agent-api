@@ -97,12 +97,14 @@ async def validate_user_id(authorization: str = Header(None)):
 
 
 @app.post("/get-key-traits")
-def get_key_traits_request(
+async def get_key_traits_request(
     job_description: JobDescription, user_id: str = Depends(validate_user_id)
 ):
     try:
-        ideal_profiles = get_list_of_profiles(job_description.ideal_profile_urls)
-        key_traits_output = get_key_traits(job_description.description, ideal_profiles)
+        ideal_profiles = await get_list_of_profiles(job_description.ideal_profile_urls)
+        key_traits_output = await get_key_traits(
+            job_description.description, ideal_profiles
+        )
         key_traits_output = key_traits_output.model_dump()
         key_traits_output["ideal_profiles"] = ideal_profiles
         return key_traits_output
