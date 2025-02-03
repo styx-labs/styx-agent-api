@@ -166,42 +166,52 @@ class CandidateProcessor:
             # Check cache first
             if firestore.check_cached_candidate_exists(public_id):
                 cached_candidate = firestore.get_cached_candidate(public_id)
-                # Use cached data but preserve search_mode from request
+                if not cached_candidate.get("name"):
+                    logging.error(
+                        f"No name found for {candidate_data['url']}, using full name from ProxyCurl"
+                    )
+                else:
+                    # Use cached data but preserve search_mode from request
+                    search_mode = candidate_data.get("search_mode", True)
+                    candidate_data.update(
+                        {
+                            "context": cached_candidate["context"],
+                            "name": cached_candidate["name"],
+                            "profile": cached_candidate["profile"],
+                            "public_identifier": public_id,
+                            "source_str": cached_candidate["source_str"],
+                            "citations": cached_candidate["citations"],
+                            "cached": True,
+                            "search_mode": search_mode,
+                        }
+                    )
+                    return candidate_data
+            else:
+                # Only call ProxyCurl if not cached
+                (
+                    full_name,
+                    profile,
+                    public_id,
+                ) = await get_linkedin_profile_with_companies(candidate_data["url"])
+                if not full_name or not profile:
+                    logging.error(
+                        f"No full name or profile found for {candidate_data['url']}, skipping"
+                    )
+                    return None
+
+                # Preserve search_mode when updating data
                 search_mode = candidate_data.get("search_mode", True)
                 candidate_data.update(
                     {
-                        "context": cached_candidate["context"],
-                        "name": cached_candidate["name"],
-                        "profile": cached_candidate["profile"],
+                        "context": profile.to_context_string(),
+                        "name": full_name,
+                        "profile": profile,
                         "public_identifier": public_id,
-                        "source_str": cached_candidate["source_str"],
-                        "citations": cached_candidate["citations"],
-                        "cached": True,
+                        "cached": False,
                         "search_mode": search_mode,
                     }
                 )
                 return candidate_data
-
-            # Only call ProxyCurl if not cached
-            full_name, profile, public_id = await get_linkedin_profile_with_companies(
-                candidate_data["url"]
-            )
-            if not profile:
-                return None
-
-            # Preserve search_mode when updating data
-            search_mode = candidate_data.get("search_mode", True)
-            candidate_data.update(
-                {
-                    "context": profile.to_context_string(),
-                    "name": full_name,
-                    "profile": profile,
-                    "public_identifier": public_id,
-                    "cached": False,
-                    "search_mode": search_mode,
-                }
-            )
-            return candidate_data
         except Exception as e:
             print(f"Error getting candidate record: {str(e)}")
             return None

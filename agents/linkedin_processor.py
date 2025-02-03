@@ -3,6 +3,7 @@ from models.linkedin import LinkedInProfile, LinkedInCompany
 from services.proxycurl import get_linkedin_profile, get_company
 from services.firestore import db
 import asyncio
+import logging
 
 
 async def get_experience_companies(profile: LinkedInProfile) -> None:
@@ -53,29 +54,25 @@ async def get_experience_companies(profile: LinkedInProfile) -> None:
 async def get_linkedin_profile_with_companies(
     url: str,
 ) -> tuple[str, LinkedInProfile, str]:
-    """
-    Get LinkedIn profile data and enrich with company data.
-    Companies are fetched from Firebase if available, otherwise from ProxyCurl.
-    Company data is stored separately in Firebase and not included in the profile storage.
+    try:
+        # First get the basic profile
+        full_name, profile, public_id = await get_linkedin_profile(url)
 
-    Args:
-        url: LinkedIn profile URL
+        if not full_name or not profile or not public_id:
+            raise ValueError("Missing required profile data from LinkedIn API")
 
-    Returns:
-        tuple[str, LinkedInProfile, str]: Tuple of (full name, profile object, public identifier)
-    """
-    # First get the basic profile
-    full_name, profile, public_id = await get_linkedin_profile(url)
+        # Get and store company data for experiences
+        await get_experience_companies(profile)
 
-    # Get and store company data for experiences
-    await get_experience_companies(profile)
+        # Analyze career metrics
+        profile.analyze_career()
 
-    # Analyze career metrics
-    profile.analyze_career()
+        # Save profile to Firebase - company_data will be automatically excluded
+        profile_dict = profile.dict()
+        profile_ref = db.collection("candidates").document(public_id)
+        profile_ref.set(profile_dict, merge=True)
 
-    # Save profile to Firebase - company_data will be automatically excluded
-    profile_dict = profile.dict()
-    profile_ref = db.collection("candidates").document(public_id)
-    profile_ref.set(profile_dict, merge=True)
-
-    return full_name, profile, public_id
+        return full_name, profile, public_id
+    except Exception as e:
+        logging.error(f"Failed to get LinkedIn profile for URL {url}: {str(e)}")
+        raise

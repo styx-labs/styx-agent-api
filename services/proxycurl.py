@@ -38,17 +38,19 @@ async def get_linkedin_profile(url: str) -> tuple[str, LinkedInProfile, str]:
 
             # Convert the raw response into our structured model
             profile = LinkedInProfile(
-                full_name=data["full_name"],
+                full_name=data.get("full_name"),
                 occupation=data.get("occupation"),
                 headline=data.get("headline"),
                 summary=data.get("summary"),
                 city=data.get("city"),
                 country=data.get("country"),
-                public_identifier=data["public_identifier"],
+                public_identifier=data.get("public_identifier"),
                 experiences=[
                     LinkedInExperience(
-                        title=exp["title"],
-                        company=exp["company"] if "company" in exp else "No Company",
+                        title=exp.get("title"),
+                        company=exp.get("company")
+                        if "company" in exp
+                        else "No Company",
                         description=exp.get("description"),
                         starts_at=convert_date_dict(exp.get("starts_at")),
                         ends_at=convert_date_dict(exp.get("ends_at")),
@@ -62,9 +64,9 @@ async def get_linkedin_profile(url: str) -> tuple[str, LinkedInProfile, str]:
                 ],
                 education=[
                     LinkedInEducation(
-                        school=edu["school"],
-                        degree_name=edu["degree_name"],
-                        field_of_study=edu["field_of_study"],
+                        school=edu.get("school"),
+                        degree_name=edu.get("degree_name"),
+                        field_of_study=edu.get("field_of_study"),
                         starts_at=convert_date_dict(edu.get("starts_at")),
                         ends_at=convert_date_dict(edu.get("ends_at")),
                         school_linkedin_profile_url=edu.get(
