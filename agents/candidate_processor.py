@@ -129,6 +129,7 @@ class CandidateProcessor:
                 "optional_met": graph_result["optional_met"],
                 "search_mode": candidate_data.get("search_mode", True),
                 "fit": graph_result["fit"],
+                "favorite": False,
             }
 
             firestore.add_candidate_to_job(
