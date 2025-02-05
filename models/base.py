@@ -43,3 +43,4 @@ class Candidate(SerializableModel):
     confidence_threshold: float = 0.5
     search_mode: bool = True
     updated_at: datetime = Field(default_factory=datetime.now)
+    favorite: bool = False

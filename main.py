@@ -579,3 +579,17 @@ async def test_reachout_template(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error testing reachout template: {str(e)}",
         )
+
+
+@app.post("/jobs/{job_id}/candidates/{candidate_id}/favorite")
+def toggle_favorite(
+    job_id: str, candidate_id: str, user_id: str = Depends(validate_user_id)
+):
+    try:
+        new_favorite_status = firestore.toggle_candidate_favorite(job_id, candidate_id, user_id)
+        return {"favorite": new_favorite_status}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to toggle favorite status: {str(e)}",
+        )

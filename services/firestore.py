@@ -456,3 +456,24 @@ def set_custom_instructions(
         )
 
     return get_custom_instructions(user_id)
+
+
+def toggle_candidate_favorite(job_id: str, candidate_id: str, user_id: str) -> bool:
+    """Toggle favorite status for a candidate in a job"""
+    candidate_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("jobs")
+        .document(job_id)
+        .collection("candidates")
+        .document(candidate_id)
+    )
+    
+    doc = candidate_ref.get()
+    if not doc.exists:
+        return False
+        
+    candidate_data = doc.to_dict()
+    current_favorite = candidate_data.get("favorite", False)
+    candidate_ref.update({"favorite": not current_favorite})
+    return not current_favorite
