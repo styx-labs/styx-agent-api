@@ -10,7 +10,7 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 import services.firestore as firestore
-from models.base import Job, JobDescription, KeyTrait
+from models.base import Job, JobDescription
 from models.api import (
     Candidate,
     BulkLinkedInPayload,
@@ -21,7 +21,6 @@ from models.api import (
     TestTemplateRequest,
 )
 from dotenv import load_dotenv
-from services.get_secret import get_secret
 from services.proxycurl import get_email, get_linkedin_profile
 from agents.helper_functions import (
     get_key_traits,
@@ -33,7 +32,6 @@ from agents.candidate_processor import CandidateProcessor
 from services.stripe import create_checkout_session
 import logging
 import sys
-import stripe
 from typing import Optional, List
 from services.firestore import (
     get_user_templates,
@@ -43,6 +41,7 @@ from services.firestore import (
 )
 from models.templates import UserTemplates
 from models.instructions import CustomInstructions
+from pydantic import BaseModel
 
 
 load_dotenv()
@@ -421,47 +420,15 @@ async def stripe_webhook(request: Request):
         payload = await request.body()
         sig_header = request.headers.get("stripe-signature")
 
-        if not sig_header:
-            raise HTTPException(status_code=400, detail="No signature header")
+        # Convert payload to string if it's bytes
+        if isinstance(payload, bytes):
+            payload_str = payload.decode("utf-8")
+        else:
+            payload_str = payload
 
-        try:
-            # Convert payload to string if it's bytes
-            if isinstance(payload, bytes):
-                payload_str = payload.decode("utf-8")
-            else:
-                payload_str = payload
+        from services.stripe_webhook import handle_stripe_webhook
 
-            event = stripe.Webhook.construct_event(
-                payload_str, sig_header, get_secret("stripe-webhook-secret", "1")
-            )
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid payload: {str(e)}")
-        except stripe.error.SignatureVerificationError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid signature: {str(e)}")
-
-        # Handle the event
-        if event["type"] == "checkout.session.completed":
-            session = event["data"]["object"]
-
-            # Get user ID and plan from metadata
-            user_id = session.get("metadata", {}).get("user_id")
-            plan_id = session.get("metadata", {}).get("plan_id")
-
-            if not user_id or not plan_id:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Missing user_id or plan_id in session metadata",
-                )
-
-            # Determine credits based on plan
-            credits_to_add = 100 if plan_id.lower() == "basic" else 500
-
-            # Add credits to user's account
-            new_total = firestore.add_search_credits(user_id, credits_to_add)
-
-            return {"status": "success", "new_credit_total": new_total}
-
-        return {"status": "success", "type": event["type"]}
+        return await handle_stripe_webhook(payload_str, sig_header)
 
     except HTTPException:
         raise
@@ -586,10 +553,48 @@ def toggle_favorite(
     job_id: str, candidate_id: str, user_id: str = Depends(validate_user_id)
 ):
     try:
-        new_favorite_status = firestore.toggle_candidate_favorite(job_id, candidate_id, user_id)
+        new_favorite_status = firestore.toggle_candidate_favorite(
+            job_id, candidate_id, user_id
+        )
         return {"favorite": new_favorite_status}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to toggle favorite status: {str(e)}",
+        )
+
+
+class BulkCandidatePayload(BaseModel):
+    candidate_ids: List[str]
+
+
+@app.delete("/jobs/{job_id}/candidates_bulk")
+def bulk_delete_candidates(
+    job_id: str, payload: BulkCandidatePayload, user_id: str = Depends(validate_user_id)
+):
+    try:
+        success = firestore.bulk_remove_candidates_from_job(
+            job_id, payload.candidate_ids, user_id
+        )
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete candidates: {str(e)}",
+        )
+
+
+@app.post("/jobs/{job_id}/candidates_bulk/favorite")
+def bulk_favorite_candidates(
+    job_id: str, payload: BulkCandidatePayload, user_id: str = Depends(validate_user_id)
+):
+    try:
+        success = firestore.bulk_favorite_candidates(
+            job_id, payload.candidate_ids, user_id
+        )
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to favorite candidates: {str(e)}",
         )
