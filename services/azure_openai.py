@@ -7,8 +7,8 @@ from services.get_secret import get_secret
 llm = AzureChatOpenAI(
     deployment_name="gpt-4o",
     openai_api_version="2024-08-01-preview",
-    azure_endpoint=get_secret("azure-openai-endpoint", "1"),
-    openai_api_key=get_secret("azure-openai-api-key", "1"),
+    azure_endpoint=get_secret("azure-openai-endpoint", "2"),
+    openai_api_key=get_secret("azure-openai-api-key", "2"),
     temperature=0,
     max_retries=5,
 )
@@ -16,8 +16,8 @@ llm = AzureChatOpenAI(
 llm_4o_mini = AzureChatOpenAI(
     deployment_name="gpt-4o-mini",
     openai_api_version="2024-08-01-preview",
-    azure_endpoint=get_secret("azure-openai-endpoint", "1"),
-    openai_api_key=get_secret("azure-openai-api-key", "1"),
+    azure_endpoint=get_secret("azure-openai-endpoint", "2"),
+    openai_api_key=get_secret("azure-openai-api-key", "2"),
     temperature=0,
     max_retries=5,
 )
