@@ -1,5 +1,5 @@
 from langchain_core.messages import HumanMessage, SystemMessage
-from services.azure_openai import llm
+from services.llms import llm
 from langsmith import traceable
 from agents.prompts import (
     key_traits_prompt,
