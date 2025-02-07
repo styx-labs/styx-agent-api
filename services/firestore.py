@@ -456,3 +456,88 @@ def set_custom_instructions(
         )
 
     return get_custom_instructions(user_id)
+
+
+def toggle_candidate_favorite(job_id: str, candidate_id: str, user_id: str) -> bool:
+    """Toggle favorite status for a candidate in a job"""
+    candidate_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("jobs")
+        .document(job_id)
+        .collection("candidates")
+        .document(candidate_id)
+    )
+
+    doc = candidate_ref.get()
+    if not doc.exists:
+        return False
+
+    candidate_data = doc.to_dict()
+    current_favorite = candidate_data.get("favorite", False)
+    candidate_ref.update({"favorite": not current_favorite})
+    return not current_favorite
+
+
+def bulk_remove_candidates_from_job(
+    job_id: str, candidate_ids: List[str], user_id: str
+) -> bool:
+    """Remove multiple candidates from a job efficiently using batched writes"""
+    batch = db.batch()
+    batch_size = 500
+    deleted = 0
+
+    for candidate_id in candidate_ids:
+        job_ref = (
+            db.collection("users")
+            .document(user_id)
+            .collection("jobs")
+            .document(job_id)
+            .collection("candidates")
+            .document(candidate_id)
+        )
+        batch.delete(job_ref)
+        deleted += 1
+
+        # Commit batch when size limit reached and start new batch
+        if deleted % batch_size == 0:
+            batch.commit()
+            batch = db.batch()
+
+    # Commit any remaining deletes
+    if deleted % batch_size != 0:
+        batch.commit()
+
+    return True
+
+
+def bulk_favorite_candidates(
+    job_id: str, candidate_ids: List[str], user_id: str, favorite_status: bool = True
+) -> bool:
+    """Set favorite status for multiple candidates efficiently using batched writes"""
+    batch = db.batch()
+    batch_size = 500
+    updated = 0
+
+    for candidate_id in candidate_ids:
+        candidate_ref = (
+            db.collection("users")
+            .document(user_id)
+            .collection("jobs")
+            .document(job_id)
+            .collection("candidates")
+            .document(candidate_id)
+        )
+        batch.update(candidate_ref, {"favorite": favorite_status})
+        updated += 1
+
+        # Commit batch when size limit reached and start new batch
+        if updated % batch_size == 0:
+            batch.commit()
+            batch = db.batch()
+
+    # Commit any remaining updates
+    if updated % batch_size != 0:
+        batch.commit()
+
+    return True
