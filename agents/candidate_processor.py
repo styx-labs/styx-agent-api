@@ -222,34 +222,34 @@ class CandidateProcessor:
         """Process a list of LinkedIn URLs in bulk."""
         try:
             logging.info(f"Processing {len(urls)} LinkedIn URLs")
-            
+
             dummy_id = self.create_dummy_candidate(len(urls))
-            
+
             # Create all candidate data objects first
             candidate_data_list = [
                 Candidate(url=url, search_mode=search_mode).model_dump() for url in urls
             ]
             for data in candidate_data_list:
                 data["search_mode"] = search_mode
-            
+
             # Process URL fetches concurrently using gather
             fetch_tasks = [
                 run_in_threadpool(lambda d=data: self.get_candidate_record(d))
                 for data in candidate_data_list
             ]
             candidates = await asyncio.gather(*fetch_tasks)
-            
+
             # Filter out failed fetches
             candidates = [c for c in candidates if c is not None]
-            
+
             logging.info(f"Successfully fetched {len(candidates)} profiles")
-            
+
             # Process candidates concurrently
             eval_tasks = [
                 self.process_single_candidate(candidate) for candidate in candidates
             ]
             await asyncio.gather(*eval_tasks)
-            
+
         except Exception as e:
             logging.error(str(e))
         finally:
@@ -272,6 +272,7 @@ class CandidateProcessor:
             {
                 "status": "processing",
                 "name": f"Loading {num_urls} candidates...",
+                "is_loading_indicator": True,
             },
         )
         return id

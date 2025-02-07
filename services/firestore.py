@@ -277,9 +277,13 @@ def get_candidates(
             if _meets_trait_requirements(candidate.get("sections", []), filter_traits)
         ]
 
-    # Sort using tuple comparison for efficiency
-    return sorted(
-        all_candidates,
+    # Separate loading indicators and real candidates
+    loading_indicators = [c for c in all_candidates if c.get("is_loading_indicator")]
+    real_candidates = [c for c in all_candidates if not c.get("is_loading_indicator")]
+
+    # Sort real candidates using tuple comparison for efficiency
+    sorted_candidates = sorted(
+        real_candidates,
         key=lambda x: (
             x.get("required_met", 0),
             x.get("optional_met", 0),
@@ -287,6 +291,9 @@ def get_candidates(
         ),
         reverse=True,
     )
+
+    # Return loading indicators first, followed by sorted real candidates
+    return loading_indicators + sorted_candidates
 
 
 def _meets_trait_requirements(sections: List[Dict], required_traits: List[str]) -> bool:
