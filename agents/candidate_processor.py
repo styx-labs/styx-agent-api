@@ -12,6 +12,7 @@ from services.firestore import get_custom_instructions
 import re
 from models.linkedin import LinkedInProfile
 import uuid
+from fastapi.concurrency import run_in_threadpool
 
 
 class CandidateProcessor:
@@ -153,7 +154,7 @@ class CandidateProcessor:
                 detail=f"Error running candidate evaluation: {str(e)}",
             )
 
-    async def get_candidate_record(self, candidate_data: Dict) -> Optional[Dict]:
+    def get_candidate_record(self, candidate_data: Dict) -> Optional[Dict]:
         """Get candidate record from LinkedIn URL with enriched company data."""
         try:
             public_id = self._extract_linkedin_id(candidate_data["url"])
@@ -192,7 +193,7 @@ class CandidateProcessor:
                     full_name,
                     profile,
                     public_id,
-                ) = await get_linkedin_profile_with_companies(candidate_data["url"])
+                ) = get_linkedin_profile_with_companies(candidate_data["url"])
                 if not full_name or not profile:
                     logging.error(
                         f"No full name or profile found for {candidate_data['url']}, skipping"
@@ -224,7 +225,7 @@ class CandidateProcessor:
             dummy_id = self.create_dummy_candidate(len(urls))
 
             # Process URLs concurrently
-            tasks = []
+            candidates = []
             for url in urls:
                 candidate_data = Candidate(
                     url=url, search_mode=search_mode
@@ -232,13 +233,17 @@ class CandidateProcessor:
                 candidate_data["search_mode"] = (
                     search_mode  # Ensure search_mode is passed through
                 )
-                tasks.append(self.get_candidate_record(candidate_data))
+                candidate_data = await run_in_threadpool(
+                    lambda: self.get_candidate_record(candidate_data)
+                )
+                if not candidate_data:
+                    logging.error(f"Failed to fetch LinkedIn profile for {url}")
+                    continue
 
-            # Wait for all candidate records to be fetched
-            candidate_results = await asyncio.gather(*tasks)
+                candidates.append(candidate_data)
 
             # Filter out failed fetches
-            candidates = [c for c in candidate_results if c is not None]
+            candidates = [c for c in candidates if c is not None]
 
             logging.info(f"Successfully fetched {len(candidates)} profiles")
 

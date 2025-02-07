@@ -2,11 +2,10 @@ import re
 from models.linkedin import LinkedInProfile, LinkedInCompany
 from services.proxycurl import get_linkedin_profile, get_company
 from services.firestore import db
-import asyncio
 import logging
 
 
-async def get_experience_companies(profile: LinkedInProfile) -> None:
+def get_experience_companies(profile: LinkedInProfile) -> None:
     """
     Get and store company data for all experiences in a profile.
     If company exists in Firebase, use cached data.
@@ -37,32 +36,25 @@ async def get_experience_companies(profile: LinkedInProfile) -> None:
                     # Add to list of companies to fetch
                     tasks.append((exp, company_id, company_ref))
 
-    # Fetch all uncached companies concurrently
-    if tasks:
-        company_results = await asyncio.gather(
-            *[get_company(exp.company_linkedin_profile_url) for exp, _, _ in tasks]
-        )
-
-        # Update experiences and store in Firebase
-        for (exp, _, company_ref), company in zip(tasks, company_results):
-            if company:
-                company_dict = company.dict()
-                company_ref.set(company_dict)
-                exp.company_data = company
+                    company = get_company(exp.company_linkedin_profile_url)
+                    if company:
+                        company_dict = company.dict()
+                        company_ref.set(company_dict)
+                        exp.company_data = company
 
 
-async def get_linkedin_profile_with_companies(
+def get_linkedin_profile_with_companies(
     url: str,
 ) -> tuple[str, LinkedInProfile, str]:
     try:
         # First get the basic profile
-        full_name, profile, public_id = await get_linkedin_profile(url)
+        full_name, profile, public_id = get_linkedin_profile(url)
 
         if not full_name or not profile or not public_id:
             raise ValueError("Missing required profile data from LinkedIn API")
 
         # Get and store company data for experiences
-        await get_experience_companies(profile)
+        get_experience_companies(profile)
 
         # Analyze career metrics
         profile.analyze_career()
