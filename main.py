@@ -586,11 +586,14 @@ def bulk_delete_candidates(
 
 @app.post("/jobs/{job_id}/candidates_bulk/favorite")
 def bulk_favorite_candidates(
-    job_id: str, payload: BulkCandidatePayload, user_id: str = Depends(validate_user_id)
+    job_id: str,
+    payload: BulkCandidatePayload,
+    user_id: str = Depends(validate_user_id),
+    favorite_status: bool = True,
 ):
     try:
         success = firestore.bulk_favorite_candidates(
-            job_id, payload.candidate_ids, user_id
+            job_id, payload.candidate_ids, user_id, favorite_status
         )
         return {"success": success}
     except Exception as e:
