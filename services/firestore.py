@@ -11,7 +11,7 @@ from models.templates import UserTemplates
 from models.instructions import CustomInstructions
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from services.azure_openai import get_azure_openai
+from services.llms import get_azure_openai
 
 dotenv.load_dotenv()
 
