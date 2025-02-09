@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 from pydantic import Field
 from .base import SerializableModel, Candidate
@@ -71,3 +71,22 @@ class TestTemplateRequest(SerializableModel):
 
     format: str
     template_content: str
+
+
+class PipelineFeedbackPayload(SerializableModel):
+    """Payload for pipeline-level feedback"""
+
+    feedback: str
+
+
+class CandidateCalibrationPayload(SerializableModel):
+    """Payload for individual candidate calibration"""
+
+    fit: str  # "good" or "bad"
+    reasoning: str
+
+
+class BulkCalibrationPayload(SerializableModel):
+    """Payload for bulk candidate calibration"""
+
+    feedback: Dict[str, CandidateCalibrationPayload]  # Dict of candidate_id to feedback

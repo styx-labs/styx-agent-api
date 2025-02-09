@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, UTC
 from typing import List, Dict, Optional
 from models.templates import UserTemplates
 from models.instructions import CustomInstructions
+import logging
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.llms import get_azure_openai
@@ -548,3 +549,16 @@ def bulk_favorite_candidates(
         batch.commit()
 
     return True
+
+
+def edit_job(job_id: str, user_id: str, job_data: dict) -> bool:
+    """Edit a job's data"""
+    try:
+        doc_ref = (
+            db.collection("users").document(user_id).collection("jobs").document(job_id)
+        )
+        doc_ref.update(job_data)
+        return True
+    except Exception as e:
+        logging.error(f"Error editing job: {str(e)}")
+        return False

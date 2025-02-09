@@ -13,15 +13,23 @@ class KeyTrait(SerializableModel):
     required: bool = True
 
 
+class PipelineFeedback(SerializableModel):
+    """Represents a pipeline feedback"""
+
+    feedback: str
+    timestamp: datetime
+
+
 class Job(SerializableModel):
     """Represents a job posting"""
 
     job_description: str
     key_traits: List[KeyTrait]
-    ideal_profiles: List[str] = None
+    ideal_profiles: list[str] = None
     job_title: str
     company_name: str
     created_at: datetime = Field(default_factory=datetime.now)
+    pipeline_feedback: list[PipelineFeedback] = None
 
 
 class JobDescription(SerializableModel):

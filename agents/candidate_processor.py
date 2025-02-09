@@ -6,13 +6,14 @@ import services.firestore as firestore
 from models.base import KeyTrait, Candidate
 import psutil
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from services.evaluate import run_graph
 from services.firestore import get_custom_instructions
 import re
 from models.linkedin import LinkedInProfile
 import uuid
 from fastapi.concurrency import run_in_threadpool
+from models.api import CandidateCalibrationPayload
 
 
 class CandidateProcessor:
@@ -76,7 +77,23 @@ class CandidateProcessor:
 
             # Run evaluation with all the necessary data
             graph_result = await run_graph(
-                job_description=self.job_data["job_description"],
+                job_description=(
+                    self.job_data["job_description"]
+                    + "\n\n"
+                    + "\n\n".join(
+                        [
+                            f"Pipeline Feedback: {fb.get('feedback')} - {fb.get('timestamp')}"
+                            for fb in self.job_data.get("pipeline_feedback", [])
+                        ]
+                    )
+                    + "\n\n"
+                    + "\n\n".join(
+                        [
+                            f"Candidate Calibration: Context: {cal.get('context')}, Score: {cal.get('fit')}, Reasoning: {cal.get('reasoning')}"
+                            for cal in self.job_data.get("calibrated_candidates", [])
+                        ]
+                    )
+                ),
                 candidate_context=candidate_data["context"],
                 candidate_full_name=candidate_data["name"],
                 profile=candidate_data["profile"],
@@ -88,11 +105,11 @@ class CandidateProcessor:
                 cached=candidate_data.get("cached", False),
                 citations=candidate_data.get("citations"),
                 source_str=candidate_data.get("source_str"),
-                custom_instructions=get_custom_instructions(
-                    self.user_id
-                ).evaluation_instructions
-                if get_custom_instructions(self.user_id)
-                else "",
+                custom_instructions=(
+                    get_custom_instructions(self.user_id).evaluation_instructions
+                    if get_custom_instructions(self.user_id)
+                    else ""
+                ),
             )
 
             profile = LinkedInProfile(**graph_result["candidate_profile"]).dict()
@@ -276,3 +293,129 @@ class CandidateProcessor:
             },
         )
         return id
+
+    async def apply_pipeline_feedback(
+        self, feedback: str, settings: Optional[Dict] = None
+    ) -> None:
+        """Apply pipeline-level feedback and recalibrate all candidates"""
+        try:
+            logging.info("Applying pipeline feedback and recalibrating candidates")
+
+            # Update job data with feedback
+            if "pipeline_feedback" not in self.job_data:
+                self.job_data["pipeline_feedback"] = []
+
+            self.job_data["pipeline_feedback"].append(
+                {"feedback": feedback, "timestamp": datetime.now(UTC).isoformat()}
+            )
+
+            if settings:
+                self.job_data.update(settings)
+
+            # Update job in Firestore
+            firestore.edit_job(self.job_id, self.user_id, self.job_data)
+
+            # Recalibrate all candidates
+            await self.reevaluate_candidates()
+
+        except Exception as e:
+            logging.error(f"Error applying pipeline feedback: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error applying pipeline feedback: {str(e)}",
+            )
+
+    async def calibrate_candidate(
+        self,
+        candidate_id: str,
+        fit: str,
+        reasoning: str,
+        settings: Optional[Dict] = None,
+    ) -> None:
+        """Calibrate a single candidate and optionally update evaluation settings"""
+        try:
+            # Get candidate data
+            candidate = firestore.get_full_candidate(
+                self.job_id, candidate_id, self.user_id
+            )
+            if not candidate:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Candidate with id {candidate_id} not found",
+                )
+
+            # Update candidate calibration data
+            candidate["calibration"] = {
+                "fit": fit,
+                "reasoning": reasoning,
+                "timestamp": datetime.now(UTC),
+            }
+
+            # Update settings if provided
+            if settings:
+                candidate.update(settings)
+
+            # Update job_data to include calibrated candidate info
+            if "calibrated_candidates" not in self.job_data:
+                self.job_data["calibrated_candidates"] = []
+
+            new_calibration = {
+                "candidate_id": candidate_id,
+                "fit": fit,
+                "reasoning": reasoning,
+                "context": candidate.get("context", ""),
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+
+            # Update an existing record if it exists, otherwise append
+            existing = next(
+                (
+                    item
+                    for item in self.job_data["calibrated_candidates"]
+                    if item["candidate_id"] == candidate_id
+                ),
+                None,
+            )
+            if existing:
+                existing.update(new_calibration)
+            else:
+                self.job_data["calibrated_candidates"].append(new_calibration)
+
+            # Persist the updated job_data in Firestore
+            firestore.edit_job(self.job_id, self.user_id, self.job_data)
+
+            # Re-evaluate the candidate
+            await self.process_single_candidate(candidate)
+
+        except Exception as e:
+            logging.error(f"Error calibrating candidate: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error calibrating candidate: {str(e)}",
+            )
+
+    async def bulk_calibrate_candidates(
+        self, feedback: Dict[str, CandidateCalibrationPayload]
+    ) -> None:
+        """Calibrate multiple candidates in bulk"""
+        try:
+            # Process each candidate's feedback concurrently
+            tasks = []
+            for candidate_id, calibration_data in feedback.items():
+                tasks.append(
+                    self.calibrate_candidate(
+                        candidate_id,
+                        calibration_data.fit,
+                        calibration_data.reasoning,
+                    )
+                )
+
+            # Wait for all calibrations to complete
+            await asyncio.gather(*tasks)
+
+        except Exception as e:
+            logging.error(f"Error in bulk calibration: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error in bulk calibration: {str(e)}",
+            )

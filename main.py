@@ -19,6 +19,9 @@ from models.api import (
     CheckoutSessionRequest,
     EditKeyTraitsPayload,
     TestTemplateRequest,
+    PipelineFeedbackPayload,
+    CandidateCalibrationPayload,
+    BulkCalibrationPayload,
 )
 from dotenv import load_dotenv
 from services.proxycurl import get_email, get_linkedin_profile
@@ -604,4 +607,101 @@ def bulk_favorite_candidates(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to favorite candidates: {str(e)}",
+        )
+
+
+@app.post("/jobs/{job_id}/pipeline-feedback")
+async def apply_pipeline_feedback(
+    job_id: str,
+    payload: PipelineFeedbackPayload,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(validate_user_id),
+):
+    """Apply pipeline-level feedback and recalibrate all candidates"""
+    try:
+        job_data = firestore.get_job(job_id, user_id)
+        if not job_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job with id {job_id} not found",
+            )
+
+        processor = CandidateProcessor(job_id, job_data, user_id)
+        settings = {}
+        if payload.confidence_threshold is not None:
+            settings["confidence_threshold"] = payload.confidence_threshold
+        if payload.number_of_queries is not None:
+            settings["number_of_queries"] = payload.number_of_queries
+
+        background_tasks.add_task(
+            processor.apply_pipeline_feedback,
+            payload.feedback,
+            settings if settings else None,
+        )
+        return {"message": "Pipeline feedback processing started"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error applying pipeline feedback: {str(e)}",
+        )
+
+
+@app.post("/jobs/{job_id}/candidates/{candidate_id}/recalibrate")
+async def recalibrate_candidate(
+    job_id: str,
+    candidate_id: str,
+    payload: CandidateCalibrationPayload,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(validate_user_id),
+):
+    """Recalibrate a single candidate"""
+    try:
+        job_data = firestore.get_job(job_id, user_id)
+        if not job_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job with id {job_id} not found",
+            )
+
+        processor = CandidateProcessor(job_id, job_data, user_id)
+        settings = {}
+
+        background_tasks.add_task(
+            processor.calibrate_candidate,
+            candidate_id,
+            payload.fit,
+            payload.reasoning,
+            settings if settings else None,
+        )
+        return {"message": "Candidate recalibration started"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error recalibrating candidate: {str(e)}",
+        )
+
+
+@app.post("/jobs/{job_id}/candidates/bulk-recalibrate")
+async def bulk_recalibrate_candidates(
+    job_id: str,
+    payload: BulkCalibrationPayload,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(validate_user_id),
+):
+    """Recalibrate multiple candidates in bulk"""
+    try:
+        job_data = firestore.get_job(job_id, user_id)
+        if not job_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job with id {job_id} not found",
+            )
+
+        processor = CandidateProcessor(job_id, job_data, user_id)
+        background_tasks.add_task(processor.bulk_calibrate_candidates, payload.feedback)
+        return {"message": "Bulk recalibration started"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error in bulk recalibration: {str(e)}",
         )
