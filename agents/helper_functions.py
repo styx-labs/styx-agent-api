@@ -8,17 +8,15 @@ from agents.prompts import (
 )
 from agents.linkedin_processor import get_linkedin_profile_with_companies
 from services.firestore import get_user_templates
-from typing import List
-import services.firestore as firestore
 from models.evaluation import KeyTraitsOutput
 
 
 @traceable(name="get_list_of_profiles")
-async def get_list_of_profiles(ideal_profile_urls: list[str]) -> list[str]:
+def get_list_of_profiles(ideal_profile_urls: list[str]) -> list[str]:
     if ideal_profile_urls:
         ideal_profiles = []
         for url in ideal_profile_urls:
-            _, profile, _ = await get_linkedin_profile_with_companies(url)
+            _, profile, _ = get_linkedin_profile_with_companies(url)
             ideal_profiles.append(profile.to_context_string())
         return ideal_profiles
     return []
