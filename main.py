@@ -247,7 +247,9 @@ async def create_candidate(
 
     processor = CandidateProcessor(job_id, job_data, user_id)
 
-    background_tasks.add_task(processor.process_urls, [candidate.url])
+    background_tasks.add_task(
+        processor.process_urls, [candidate.url], search_mode=candidate.search_mode
+    )
     return {"message": "Candidate processing started"}
 
 
@@ -276,7 +278,9 @@ async def create_candidates_bulk(
 
     processor = CandidateProcessor(job_id, job_data, user_id)
 
-    background_tasks.add_task(processor.process_urls, payload.urls)
+    background_tasks.add_task(
+        processor.process_urls, payload.urls, search_mode=payload.search_mode
+    )
     return {"message": "Candidates processing started"}
 
 
