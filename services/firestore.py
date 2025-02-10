@@ -562,3 +562,15 @@ def edit_job(job_id: str, user_id: str, job_data: dict) -> bool:
     except Exception as e:
         logging.error(f"Error editing job: {str(e)}")
         return False
+
+
+def check_candidate_in_job(job_id: str, candidate_id: str, user_id: str) -> bool:
+    """Check if a candidate already exists in a job"""
+    doc_ref = (
+        db.collection("users").document(user_id).collection("jobs").document(job_id)
+    )
+    doc = doc_ref.get()
+    if not doc.exists:
+        return False
+    job_data = doc.to_dict()
+    return candidate_id in job_data.get("candidates", {})

@@ -10,7 +10,7 @@ key_traits_prompt = """
 
     For each requirement, provide:
     - A short, specific trait name (not a full sentence)
-    - A detailed description of the trait that will tell a sourcer what to look for in a candidate. This should be detailed - assume that the sourcer has no experience with the job and the company.
+    - A detailed description of the trait that will tell a sourcer what to look for in a candidate. This should have step by step instructions on how to decide if the trait is present - assume that the sourcer has no experience with the job and the company.
     - Whether the trait is required or a "nice to have"
 
     Guidelines:
@@ -22,8 +22,9 @@ key_traits_prompt = """
 
     Here is the job description:
     {job_description}
-    Here is the list of ideal profiles for the job:
-    {ideal_profiles}
+    
+    Here is a list of calibrated candidates for this job. Use this information to extract nuances and patterns between those that are good fits and those that are not:
+    {calibrated_profiles}
 """
 
 reachout_message_prompt_linkedin = """

@@ -6,40 +6,43 @@ from agents.prompts import (
     reachout_message_prompt_linkedin,
     reachout_message_prompt_email,
 )
+
 from agents.linkedin_processor import get_linkedin_profile_with_companies
 from services.firestore import get_user_templates
 from models.evaluation import KeyTraitsOutput
+from models.base import CalibratedProfiles
 
 
-@traceable(name="get_list_of_profiles")
-def get_list_of_profiles(ideal_profile_urls: list[str]) -> list[str]:
-    if ideal_profile_urls:
-        ideal_profiles = []
-        for url in ideal_profile_urls:
-            _, profile, _ = get_linkedin_profile_with_companies(url)
-            ideal_profiles.append(profile.to_context_string())
-        return ideal_profiles
-    return []
+@traceable(name="get_calibrated_profiles_linkedin")
+def get_calibrated_profiles_linkedin(
+    calibrated_profiles: list[CalibratedProfiles],
+) -> list[CalibratedProfiles]:
+    if calibrated_profiles:
+        for calibrated_profile in calibrated_profiles:
+            _, profile, _ = get_linkedin_profile_with_companies(calibrated_profile.url)
+            calibrated_profile.profile = profile
+    return calibrated_profiles
 
 
 @traceable(name="get_key_traits")
 def get_key_traits(
-    job_description: str, ideal_profiles: list[str]
+    job_description: str, calibrated_profiles: list[CalibratedProfiles]
 ) -> tuple[KeyTraitsOutput, list[str]]:
-    if ideal_profiles:
-        ideal_profiles_str = ""
-        for profile in ideal_profiles:
-            ideal_profiles_str += profile
-            ideal_profiles_str += "\n---------\n---------\n"
+    if calibrated_profiles:
+        calibrate_profiles_str = ""
+        for calibrated_profile in calibrated_profiles:
+            calibrate_profiles_str += str(calibrated_profile)
+            calibrate_profiles_str += "\n---------\n---------\n"
     else:
-        ideal_profiles_str = ""
+        calibrate_profiles_str = ""
 
     structured_llm = llm.with_structured_output(KeyTraitsOutput)
     output = structured_llm.invoke(
         [
             SystemMessage(
                 content=key_traits_prompt.format(
-                    job_description=job_description, ideal_profiles=ideal_profiles_str
+                    job_description=job_description,
+                    calibrated_profiles=calibrate_profiles_str,
                 )
             ),
             HumanMessage(

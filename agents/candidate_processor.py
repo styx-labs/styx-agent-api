@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, UTC
 from services.evaluate import run_graph
 from services.firestore import get_custom_instructions
-import re
+from utils.linkedin_utils import extract_linkedin_id
 from models.linkedin import LinkedInProfile
 import uuid
 from fastapi.concurrency import run_in_threadpool
@@ -40,24 +40,16 @@ class CandidateProcessor:
             f"VMS: {memory_info.vms / 1024 / 1024:.2f}MB"
         )
 
-    def _extract_linkedin_id(self, url: str) -> Optional[str]:
-        """Extract the LinkedIn public identifier from a profile URL."""
-        try:
-            # Remove any query parameters
-            url = url.split("?")[0]
-            # Remove trailing slash if present
-            url = url.rstrip("/")
-            # Get the last part of the URL which should be the ID
-            match = re.search(r"linkedin\.com/in/([^/]+)", url)
-            return match.group(1) if match else None
-        except Exception:
-            return None
-
     async def process_single_candidate(self, candidate_data: Dict) -> None:
         """Process a single candidate with evaluation"""
         try:
             logging.info(
                 f"[MEMORY] Starting candidate processing - {self._get_memory_usage()}"
+            )
+
+            # Check if this is a reevaluation by seeing if the candidate is already in the job
+            is_reevaluation = firestore.check_candidate_in_job(
+                self.job_id, candidate_data["public_identifier"], self.user_id
             )
 
             firestore.add_candidate_to_job(
@@ -156,7 +148,10 @@ class CandidateProcessor:
                 self.user_id,
                 candidate_job_data,
             )
-            firestore.decrement_search_credits(self.user_id)
+
+            # Only decrement search credits if this is not a reevaluation
+            if not is_reevaluation:
+                firestore.decrement_search_credits(self.user_id)
 
             logging.info(
                 f"[MEMORY] Completed candidate processing - {self._get_memory_usage()}"
@@ -175,7 +170,7 @@ class CandidateProcessor:
     def get_candidate_record(self, candidate_data: Dict) -> Optional[Dict]:
         """Get candidate record from LinkedIn URL with enriched company data."""
         try:
-            public_id = self._extract_linkedin_id(candidate_data["url"])
+            public_id = extract_linkedin_id(candidate_data["url"])
             if not public_id:
                 print(
                     f"Could not extract public identifier from {candidate_data['url']}"

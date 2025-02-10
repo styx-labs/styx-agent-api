@@ -1,8 +1,5 @@
-from typing import List, Optional, Dict
-from datetime import datetime
-from pydantic import Field
-from .base import SerializableModel, Candidate
-from models.linkedin import LinkedInProfile
+from typing import List, Dict
+from .base import SerializableModel, Candidate, CalibratedProfiles
 
 
 class EditKeyTraitsPayload(SerializableModel):
@@ -90,3 +87,15 @@ class BulkCalibrationPayload(SerializableModel):
     """Payload for bulk candidate calibration"""
 
     feedback: Dict[str, CandidateCalibrationPayload]  # Dict of candidate_id to feedback
+
+
+class UpdateCalibratedProfilesPayload(SerializableModel):
+    """Payload for updating calibrated profiles"""
+
+    calibrated_profiles: List[CalibratedProfiles]
+
+
+class BulkCandidatePayload(SerializableModel):
+    """Payload for bulk candidate processing"""
+
+    candidate_ids: List[str]

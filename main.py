@@ -22,13 +22,15 @@ from models.api import (
     PipelineFeedbackPayload,
     CandidateCalibrationPayload,
     BulkCalibrationPayload,
+    UpdateCalibratedProfilesPayload,
+    BulkCandidatePayload,
 )
 from dotenv import load_dotenv
 from services.proxycurl import get_email, get_linkedin_profile
 from agents.helper_functions import (
     get_key_traits,
     get_reachout_message,
-    get_list_of_profiles,
+    get_calibrated_profiles_linkedin,
 )
 from services.firebase_auth import verify_firebase_token
 from agents.candidate_processor import CandidateProcessor
@@ -44,8 +46,6 @@ from services.firestore import (
 )
 from models.templates import UserTemplates
 from models.instructions import CustomInstructions
-from pydantic import BaseModel
-
 
 load_dotenv()
 
@@ -98,34 +98,207 @@ async def validate_user_id(authorization: str = Header(None)):
         )
 
 
-@app.post("/get-key-traits")
-def get_key_traits_request(
-    job_description: JobDescription, user_id: str = Depends(validate_user_id)
-):
-    try:
-        ideal_profiles = get_list_of_profiles(job_description.ideal_profile_urls)
-        key_traits_output = get_key_traits(job_description.description, ideal_profiles)
-        key_traits_output = key_traits_output.model_dump()
-        key_traits_output["ideal_profiles"] = ideal_profiles
-        return key_traits_output
-    except Exception as e:
-        print(e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error generating key traits: {str(e)}",
-        )
-
-
+# Job Management Endpoints
 @app.post("/jobs")
 def create_job(job: Job, user_id: str = Depends(validate_user_id)):
     try:
-        job_data = job.model_dump()
+        job_data = job.dict()
         job_id = firestore.create_job(job_data, user_id)
         return {"job_id": job_id}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create job: {str(e)}",
+        )
+
+
+@app.get("/jobs")
+def get_jobs(user_id: str = Depends(validate_user_id)):
+    try:
+        jobs = firestore.get_jobs(user_id)
+        return {"jobs": jobs}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving jobs: {str(e)}",
+        )
+
+
+@app.get("/jobs/{job_id}")
+def get_job(job_id: str, user_id: str = Depends(validate_user_id)):
+    try:
+        job = firestore.get_job(job_id, user_id)
+        if not job:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job with id {job_id} not found",
+            )
+        return job
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving job: {str(e)}",
+        )
+
+
+@app.post("/jobs_recommend")
+def get_jobs_recommend(context: str, user_id: str = Depends(validate_user_id)):
+    try:
+        jobs = firestore.get_jobs_recommend(user_id, context)
+        return {"jobs": jobs}
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving jobs: {str(e)}",
+        )
+
+
+@app.delete("/jobs/{job_id}")
+def delete_job(job_id: str, user_id: str = Depends(validate_user_id)):
+    try:
+        success = firestore.delete_job(job_id, user_id)
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete job: {str(e)}",
+        )
+
+
+# Candidate Management Endpoints
+@app.post("/jobs/{job_id}/candidates")
+async def create_candidate(
+    job_id: str,
+    candidate: Candidate,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(validate_user_id),
+):
+    search_credits = firestore.get_search_credits(user_id)
+    if search_credits <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="You have no search credits remaining",
+        )
+
+    job_data = firestore.get_job(job_id, user_id)
+    if not job_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job with id {job_id} not found",
+        )
+
+    processor = CandidateProcessor(job_id, job_data, user_id)
+
+    background_tasks.add_task(
+        processor.process_urls, [candidate.url], search_mode=candidate.search_mode
+    )
+    return {"message": "Candidate processing started"}
+
+
+@app.get("/jobs/{job_id}/candidates")
+def get_candidates(
+    job_id: str,
+    filter_traits: Optional[List[str]] = Query(
+        None, description="List of traits to filter by"
+    ),
+    user_id: str = Depends(validate_user_id),
+):
+    try:
+        candidates = firestore.get_candidates(job_id, user_id, filter_traits)
+        return {"candidates": candidates}
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving candidates: {str(e)}",
+        )
+
+
+@app.delete("/jobs/{job_id}/candidates/{candidate_id}")
+def delete_candidate(
+    job_id: str, candidate_id: str, user_id: str = Depends(validate_user_id)
+):
+    try:
+        success = firestore.remove_candidate_from_job(job_id, candidate_id, user_id)
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete candidate: {str(e)}",
+        )
+
+
+# Bulk Candidate Operations
+@app.post("/jobs/{job_id}/candidates_bulk")
+async def create_candidates_bulk(
+    job_id: str,
+    background_tasks: BackgroundTasks,
+    payload: BulkLinkedInPayload,
+    user_id: str = Depends(validate_user_id),
+):
+    search_credits = firestore.get_search_credits(user_id)
+    num_urls = len(payload.urls)
+
+    if search_credits < num_urls:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"Insufficient search credits. You have {search_credits} credits but need {num_urls} credits to process all URLs.",
+        )
+
+    job_data = firestore.get_job(job_id, user_id)
+    if not job_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job with id {job_id} not found",
+        )
+
+    processor = CandidateProcessor(job_id, job_data, user_id)
+
+    background_tasks.add_task(
+        processor.process_urls, payload.urls, search_mode=payload.search_mode
+    )
+    return {"message": "Candidates processing started"}
+
+
+@app.delete("/jobs/{job_id}/candidates_bulk")
+def bulk_delete_candidates(
+    job_id: str, payload: BulkCandidatePayload, user_id: str = Depends(validate_user_id)
+):
+    try:
+        success = firestore.bulk_remove_candidates_from_job(
+            job_id, payload.candidate_ids, user_id
+        )
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete candidates: {str(e)}",
+        )
+
+
+# Candidate Evaluation and Calibration
+@app.post("/get-key-traits")
+def get_key_traits_request(
+    job_description: JobDescription, user_id: str = Depends(validate_user_id)
+):
+    try:
+        calibrated_profiles = get_calibrated_profiles_linkedin(
+            job_description.calibrated_profiles
+        )
+        key_traits_output = get_key_traits(
+            job_description.description, calibrated_profiles
+        )
+        key_traits_output = key_traits_output.model_dump()
+        key_traits_output["calibrated_profiles"] = [
+            profile.model_dump() for profile in calibrated_profiles
+        ]
+        return key_traits_output
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating key traits: {str(e)}",
         )
 
 
@@ -152,40 +325,100 @@ def edit_key_traits(
     return {"message": "Candidate processing started"}
 
 
-@app.get("/jobs")
-def get_jobs(user_id: str = Depends(validate_user_id)):
+@app.post("/jobs/{job_id}/candidates/{candidate_id}/recalibrate")
+async def recalibrate_candidate(
+    job_id: str,
+    candidate_id: str,
+    payload: CandidateCalibrationPayload,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(validate_user_id),
+):
+    """Recalibrate a single candidate"""
     try:
-        jobs = firestore.get_jobs(user_id)
-        return {"jobs": jobs}
+        job_data = firestore.get_job(job_id, user_id)
+        if not job_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job with id {job_id} not found",
+            )
+
+        processor = CandidateProcessor(job_id, job_data, user_id)
+        settings = {}
+
+        background_tasks.add_task(
+            processor.calibrate_candidate,
+            candidate_id,
+            payload.fit,
+            payload.reasoning,
+            settings if settings else None,
+        )
+        return {"message": "Candidate recalibration started"}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving jobs: {str(e)}",
+            detail=f"Error recalibrating candidate: {str(e)}",
         )
 
 
-@app.post("/jobs_recommend")
-def get_jobs_recommend(context: str, user_id: str = Depends(validate_user_id)):
+@app.post("/jobs/{job_id}/candidates/bulk-recalibrate")
+async def bulk_recalibrate_candidates(
+    job_id: str,
+    payload: BulkCalibrationPayload,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(validate_user_id),
+):
+    """Recalibrate multiple candidates in bulk"""
     try:
-        jobs = firestore.get_jobs_recommend(user_id, context)
-        return {"jobs": jobs}
+        job_data = firestore.get_job(job_id, user_id)
+        if not job_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job with id {job_id} not found",
+            )
+
+        processor = CandidateProcessor(job_id, job_data, user_id)
+        background_tasks.add_task(processor.bulk_calibrate_candidates, payload.feedback)
+        return {"message": "Bulk recalibration started"}
     except Exception as e:
-        print(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving jobs: {str(e)}",
+            detail=f"Error in bulk recalibration: {str(e)}",
         )
 
 
-@app.delete("/jobs/{job_id}")
-def delete_job(job_id: str, user_id: str = Depends(validate_user_id)):
+# Candidate Interaction (Favorites, Reachout)
+@app.post("/jobs/{job_id}/candidates/{candidate_id}/favorite")
+def toggle_favorite(
+    job_id: str, candidate_id: str, user_id: str = Depends(validate_user_id)
+):
     try:
-        success = firestore.delete_job(job_id, user_id)
+        new_favorite_status = firestore.toggle_candidate_favorite(
+            job_id, candidate_id, user_id
+        )
+        return {"favorite": new_favorite_status}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to toggle favorite status: {str(e)}",
+        )
+
+
+@app.post("/jobs/{job_id}/candidates_bulk/favorite")
+def bulk_favorite_candidates(
+    job_id: str,
+    payload: BulkCandidatePayload,
+    user_id: str = Depends(validate_user_id),
+    favorite_status: bool = True,
+):
+    try:
+        success = firestore.bulk_favorite_candidates(
+            job_id, payload.candidate_ids, user_id, favorite_status
+        )
         return {"success": success}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete job: {str(e)}",
+            detail=f"Failed to favorite candidates: {str(e)}",
         )
 
 
@@ -227,116 +460,7 @@ async def generate_reachout(
         )
 
 
-@app.post("/jobs/{job_id}/candidates")
-async def create_candidate(
-    job_id: str,
-    candidate: Candidate,
-    background_tasks: BackgroundTasks,
-    user_id: str = Depends(validate_user_id),
-):
-    search_credits = firestore.get_search_credits(user_id)
-    if search_credits <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail="You have no search credits remaining",
-        )
-
-    job_data = firestore.get_job(job_id, user_id)
-    if not job_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Job with id {job_id} not found",
-        )
-
-    processor = CandidateProcessor(job_id, job_data, user_id)
-
-    background_tasks.add_task(
-        processor.process_urls, [candidate.url], search_mode=candidate.search_mode
-    )
-    return {"message": "Candidate processing started"}
-
-
-@app.post("/jobs/{job_id}/candidates_bulk")
-async def create_candidates_bulk(
-    job_id: str,
-    background_tasks: BackgroundTasks,
-    payload: BulkLinkedInPayload,
-    user_id: str = Depends(validate_user_id),
-):
-    search_credits = firestore.get_search_credits(user_id)
-    num_urls = len(payload.urls)
-
-    if search_credits < num_urls:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=f"Insufficient search credits. You have {search_credits} credits but need {num_urls} credits to process all URLs.",
-        )
-
-    job_data = firestore.get_job(job_id, user_id)
-    if not job_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Job with id {job_id} not found",
-        )
-
-    processor = CandidateProcessor(job_id, job_data, user_id)
-
-    background_tasks.add_task(
-        processor.process_urls, payload.urls, search_mode=payload.search_mode
-    )
-    return {"message": "Candidates processing started"}
-
-
-@app.get("/jobs/{job_id}/candidates")
-def get_candidates(
-    job_id: str,
-    filter_traits: Optional[List[str]] = Query(
-        None, description="List of traits to filter by"
-    ),
-    user_id: str = Depends(validate_user_id),
-):
-    try:
-        candidates = firestore.get_candidates(job_id, user_id, filter_traits)
-        return {"candidates": candidates}
-    except Exception as e:
-        print(e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving candidates: {str(e)}",
-        )
-
-
-@app.delete("/jobs/{job_id}/candidates/{candidate_id}")
-def delete_candidate(
-    job_id: str, candidate_id: str, user_id: str = Depends(validate_user_id)
-):
-    try:
-        success = firestore.remove_candidate_from_job(job_id, candidate_id, user_id)
-        return {"success": success}
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete candidate: {str(e)}",
-        )
-
-
-@app.get("/jobs/{job_id}")
-def get_job(job_id: str, user_id: str = Depends(validate_user_id)):
-    try:
-        job = firestore.get_job(job_id, user_id)
-        if not job:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Job with id {job_id} not found",
-            )
-        return job
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving job: {str(e)}",
-        )
-
-
+# LinkedIn and Email Operations
 @app.post("/get_linkedin_context")
 def get_linkedin_context_request(url: str, user_id: str = Depends(validate_user_id)):
     try:
@@ -369,6 +493,42 @@ def get_email_request(
         )
 
 
+# User Settings and Templates
+@app.put("/settings/templates", response_model=UserTemplates)
+async def update_user_templates(
+    templates: UserTemplates,
+    user_id: str = Depends(validate_user_id),
+):
+    """Update user's templates"""
+    return set_user_templates(user_id, templates)
+
+
+@app.get("/settings/templates", response_model=UserTemplates)
+async def get_all_user_templates(
+    user_id: str = Depends(validate_user_id),
+):
+    """Get user's templates"""
+    return get_user_templates(user_id)
+
+
+@app.put("/settings/evaluation-instructions", response_model=CustomInstructions)
+async def update_evaluation_instructions(
+    instructions: CustomInstructions,
+    user_id: str = Depends(validate_user_id),
+):
+    """Update user's custom evaluation instructions"""
+    return set_custom_instructions(user_id, instructions)
+
+
+@app.get("/settings/evaluation-instructions", response_model=CustomInstructions)
+async def get_evaluation_instructions(
+    user_id: str = Depends(validate_user_id),
+):
+    """Get user's custom evaluation instructions"""
+    return get_custom_instructions(user_id)
+
+
+# Payment and Credits
 @app.post("/get-search-credits")
 def get_search_credits(user_id: str = Depends(validate_user_id)):
     try:
@@ -378,31 +538,6 @@ def get_search_credits(user_id: str = Depends(validate_user_id)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving search credits: {str(e)}",
-        )
-
-
-@app.get("/show-popup")
-def show_popup(user_id: str = Depends(validate_user_id)):
-    try:
-        return {"show_popup": firestore.show_popup(user_id)}
-    except Exception as e:
-        print(e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving search credits: {str(e)}",
-        )
-
-
-@app.post("/set-popup-shown")
-def set_popup_shown(user_id: str = Depends(validate_user_id)):
-    try:
-        firestore.set_popup_shown(user_id)
-        return {"success": True}
-    except Exception as e:
-        print(e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error setting popup shown: {str(e)}",
         )
 
 
@@ -447,40 +582,33 @@ async def stripe_webhook(request: Request):
         )
 
 
-@app.put("/settings/templates", response_model=UserTemplates)
-async def update_user_templates(
-    templates: UserTemplates,
-    user_id: str = Depends(validate_user_id),
-):
-    """Update user's templates"""
-    return set_user_templates(user_id, templates)
+# UI/UX Related
+@app.get("/show-popup")
+def show_popup(user_id: str = Depends(validate_user_id)):
+    try:
+        return {"show_popup": firestore.show_popup(user_id)}
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving search credits: {str(e)}",
+        )
 
 
-@app.get("/settings/templates", response_model=UserTemplates)
-async def get_all_user_templates(
-    user_id: str = Depends(validate_user_id),
-):
-    """Get user's templates"""
-    return get_user_templates(user_id)
+@app.post("/set-popup-shown")
+def set_popup_shown(user_id: str = Depends(validate_user_id)):
+    try:
+        firestore.set_popup_shown(user_id)
+        return {"success": True}
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error setting popup shown: {str(e)}",
+        )
 
 
-@app.put("/settings/evaluation-instructions", response_model=CustomInstructions)
-async def update_evaluation_instructions(
-    instructions: CustomInstructions,
-    user_id: str = Depends(validate_user_id),
-):
-    """Update user's custom evaluation instructions"""
-    return set_custom_instructions(user_id, instructions)
-
-
-@app.get("/settings/evaluation-instructions", response_model=CustomInstructions)
-async def get_evaluation_instructions(
-    user_id: str = Depends(validate_user_id),
-):
-    """Get user's custom evaluation instructions"""
-    return get_custom_instructions(user_id)
-
-
+# Testing Endpoints
 @app.post("/test-reachout-template")
 async def test_reachout_template(
     request: TestTemplateRequest,
@@ -555,61 +683,7 @@ async def test_reachout_template(
         )
 
 
-@app.post("/jobs/{job_id}/candidates/{candidate_id}/favorite")
-def toggle_favorite(
-    job_id: str, candidate_id: str, user_id: str = Depends(validate_user_id)
-):
-    try:
-        new_favorite_status = firestore.toggle_candidate_favorite(
-            job_id, candidate_id, user_id
-        )
-        return {"favorite": new_favorite_status}
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to toggle favorite status: {str(e)}",
-        )
-
-
-class BulkCandidatePayload(BaseModel):
-    candidate_ids: List[str]
-
-
-@app.delete("/jobs/{job_id}/candidates_bulk")
-def bulk_delete_candidates(
-    job_id: str, payload: BulkCandidatePayload, user_id: str = Depends(validate_user_id)
-):
-    try:
-        success = firestore.bulk_remove_candidates_from_job(
-            job_id, payload.candidate_ids, user_id
-        )
-        return {"success": success}
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete candidates: {str(e)}",
-        )
-
-
-@app.post("/jobs/{job_id}/candidates_bulk/favorite")
-def bulk_favorite_candidates(
-    job_id: str,
-    payload: BulkCandidatePayload,
-    user_id: str = Depends(validate_user_id),
-    favorite_status: bool = True,
-):
-    try:
-        success = firestore.bulk_favorite_candidates(
-            job_id, payload.candidate_ids, user_id, favorite_status
-        )
-        return {"success": success}
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to favorite candidates: {str(e)}",
-        )
-
-
+# Pipeline Feedback and Calibration
 @app.post("/jobs/{job_id}/pipeline-feedback")
 async def apply_pipeline_feedback(
     job_id: str,
@@ -646,15 +720,13 @@ async def apply_pipeline_feedback(
         )
 
 
-@app.post("/jobs/{job_id}/candidates/{candidate_id}/recalibrate")
-async def recalibrate_candidate(
+@app.patch("/jobs/{job_id}/calibrated-profiles")
+async def update_calibrated_profiles(
     job_id: str,
-    candidate_id: str,
-    payload: CandidateCalibrationPayload,
-    background_tasks: BackgroundTasks,
+    payload: UpdateCalibratedProfilesPayload,
     user_id: str = Depends(validate_user_id),
 ):
-    """Recalibrate a single candidate"""
+    """Update calibrated profiles for a job"""
     try:
         job_data = firestore.get_job(job_id, user_id)
         if not job_data:
@@ -663,45 +735,17 @@ async def recalibrate_candidate(
                 detail=f"Job with id {job_id} not found",
             )
 
-        processor = CandidateProcessor(job_id, job_data, user_id)
-        settings = {}
+        # Update the calibrated profiles
+        job_data["calibrated_profiles"] = [
+            profile.model_dump() for profile in payload.calibrated_profiles
+        ]
 
-        background_tasks.add_task(
-            processor.calibrate_candidate,
-            candidate_id,
-            payload.fit,
-            payload.reasoning,
-            settings if settings else None,
-        )
-        return {"message": "Candidate recalibration started"}
+        # Update the job in Firestore
+        firestore.edit_job(job_id, user_id, job_data)
+
+        return {"success": True}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error recalibrating candidate: {str(e)}",
-        )
-
-
-@app.post("/jobs/{job_id}/candidates/bulk-recalibrate")
-async def bulk_recalibrate_candidates(
-    job_id: str,
-    payload: BulkCalibrationPayload,
-    background_tasks: BackgroundTasks,
-    user_id: str = Depends(validate_user_id),
-):
-    """Recalibrate multiple candidates in bulk"""
-    try:
-        job_data = firestore.get_job(job_id, user_id)
-        if not job_data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Job with id {job_id} not found",
-            )
-
-        processor = CandidateProcessor(job_id, job_data, user_id)
-        background_tasks.add_task(processor.bulk_calibrate_candidates, payload.feedback)
-        return {"message": "Bulk recalibration started"}
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error in bulk recalibration: {str(e)}",
+            detail=f"Error updating calibrated profiles: {str(e)}",
         )
