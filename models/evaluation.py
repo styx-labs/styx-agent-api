@@ -19,6 +19,13 @@ class TraitEvaluationOutput(SerializableModel):
     evaluation: str
 
 
+class HeadlessEvaluationOutput(SerializableModel):
+    """Output from headless evaluation"""
+
+    value: int
+    evaluation: str
+
+
 class EvaluationInputState(TypedDict):
     """Input state for evaluation"""
 

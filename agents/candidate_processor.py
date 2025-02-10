@@ -39,7 +39,8 @@ class CandidateProcessor:
             f"VMS: {memory_info.vms / 1024 / 1024:.2f}MB"
         )
 
-    def _extract_linkedin_id(self, url: str) -> Optional[str]:
+    @staticmethod
+    def _extract_linkedin_id(url: str) -> Optional[str]:
         """Extract the LinkedIn public identifier from a profile URL."""
         try:
             # Remove any query parameters
@@ -51,6 +52,37 @@ class CandidateProcessor:
             return match.group(1) if match else None
         except Exception:
             return None
+        
+    async def evaluate_single_candidate(self, candidate_data: Dict) -> dict:
+        """Evaluate a single candidate without creating a candidate record and returning the result"""
+        try:
+            key_traits = [KeyTrait(**trait) for trait in self.job_data["key_traits"]]
+            return await run_graph(
+                job_description=self.job_data["job_description"],
+                candidate_context=candidate_data["context"],
+                candidate_full_name=candidate_data["name"],
+                profile=candidate_data["profile"],
+                key_traits=key_traits,
+                ideal_profiles=self.job_data["ideal_profiles"],
+                number_of_queries=candidate_data.get("number_of_queries", 0),
+                confidence_threshold=candidate_data.get("confidence_threshold", 0.0),
+                search_mode=candidate_data.get("search_mode", True),
+                cached=candidate_data.get("cached", False),
+                citations=candidate_data.get("citations"),
+                source_str=candidate_data.get("source_str"),
+                custom_instructions=get_custom_instructions(
+                    self.user_id
+                ).evaluation_instructions
+                if get_custom_instructions(self.user_id)
+                else "",
+            )
+        except Exception as e:
+            print(e)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error running candidate evaluation: {str(e)}",
+            )
+
 
     async def process_single_candidate(self, candidate_data: Dict) -> None:
         """Process a single candidate with evaluation"""
@@ -155,10 +187,11 @@ class CandidateProcessor:
                 detail=f"Error running candidate evaluation: {str(e)}",
             )
 
-    def get_candidate_record(self, candidate_data: Dict) -> Optional[Dict]:
+    @staticmethod
+    def get_candidate_record(candidate_data: Dict) -> Optional[Dict]:
         """Get candidate record from LinkedIn URL with enriched company data."""
         try:
-            public_id = self._extract_linkedin_id(candidate_data["url"])
+            public_id = CandidateProcessor._extract_linkedin_id(candidate_data["url"])
             if not public_id:
                 print(
                     f"Could not extract public identifier from {candidate_data['url']}"

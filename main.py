@@ -19,6 +19,7 @@ from models.api import (
     CheckoutSessionRequest,
     EditKeyTraitsPayload,
     TestTemplateRequest,
+    HeadlessEvaluationPayload,
 )
 from dotenv import load_dotenv
 from services.proxycurl import get_email, get_linkedin_profile
@@ -26,6 +27,7 @@ from agents.helper_functions import (
     get_key_traits,
     get_reachout_message,
     get_list_of_profiles,
+    headless_evaluate_helper,
 )
 from services.firebase_auth import verify_firebase_token
 from agents.candidate_processor import CandidateProcessor
@@ -42,6 +44,7 @@ from services.firestore import (
 from models.templates import UserTemplates
 from models.instructions import CustomInstructions
 from pydantic import BaseModel
+from services.proxycurl import get_linkedin_profile
 
 
 load_dotenv()
@@ -222,7 +225,38 @@ async def generate_reachout(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating reachout message: {str(e)}",
         )
+    
 
+@app.post("/headless_evaluate")
+async def headless_evaluate(payload: HeadlessEvaluationPayload):
+    if payload.url:
+        _, candidate, _ = get_linkedin_profile(payload.url)
+    else:
+        candidate = payload.candidate
+
+    if not candidate:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Candidate with id {payload.url} not found",
+        )
+    calibrations = []
+    for calibration in payload.calibrations:
+        try:
+            if calibration.url:
+                _, calibration_candidate, _ = get_linkedin_profile(calibration.url)
+            else:
+                calibration_candidate = calibration.candidate
+            calibrations.append({
+                "candidate_name": calibration_candidate.full_name,
+                "candidate_context": calibration_candidate.to_context_string(),
+                "calibration_result": calibration.calibration_result
+            })
+        except Exception as e:
+            print(e)
+            continue
+    
+    return headless_evaluate_helper(candidate.full_name, candidate.to_context_string(), payload.job_description, calibrations)
+    
 
 @app.post("/jobs/{job_id}/candidates")
 async def create_candidate(

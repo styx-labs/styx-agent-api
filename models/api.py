@@ -32,6 +32,23 @@ class HeadlessReachoutPayload(SerializableModel):
     citations: List[dict]
 
 
+class Calibration(SerializableModel):
+    """Calibration model"""
+
+    url: Optional[str] = None
+    candidate: Optional[LinkedInProfile] = None
+    calibration_result: str
+
+
+class HeadlessEvaluationPayload(SerializableModel):
+    """Payload for headless evaluation"""
+
+    url: Optional[str] = None
+    candidate: Optional[LinkedInProfile] = None
+    job_description: str
+    calibrations: Optional[List[Calibration]] = None
+
+
 class ParaformEvaluateGraphPayload(SerializableModel):
     """Payload for Paraform graph evaluation"""
 
