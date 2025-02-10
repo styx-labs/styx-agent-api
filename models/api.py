@@ -46,7 +46,7 @@ class HeadlessEvaluationPayload(SerializableModel):
     url: Optional[str] = None
     candidate: Optional[LinkedInProfile] = None
     job_description: str
-    calibrations: Optional[List[Calibration]] = None
+    calibrations: Optional[List[Calibration]] = []
 
 
 class ParaformEvaluateGraphPayload(SerializableModel):
