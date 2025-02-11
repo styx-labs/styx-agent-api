@@ -379,8 +379,8 @@ class CandidateProcessor:
             # Persist the updated job_data in Firestore
             firestore.edit_job(self.job_id, self.user_id, self.job_data)
 
-            # Re-evaluate the candidate
-            await self.process_single_candidate(candidate)
+            # Re-evaluate all candidates since calibration affects the context
+            await self.reevaluate_candidates()
 
         except Exception as e:
             logging.error(f"Error calibrating candidate: {str(e)}")
@@ -394,19 +394,56 @@ class CandidateProcessor:
     ) -> None:
         """Calibrate multiple candidates in bulk"""
         try:
-            # Process each candidate's feedback concurrently
-            tasks = []
+            # Process each candidate's calibration data first
             for candidate_id, calibration_data in feedback.items():
-                tasks.append(
-                    self.calibrate_candidate(
-                        candidate_id,
-                        calibration_data.fit,
-                        calibration_data.reasoning,
-                    )
+                # Get candidate data
+                candidate = firestore.get_full_candidate(
+                    self.job_id, candidate_id, self.user_id
                 )
+                if not candidate:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Candidate with id {candidate_id} not found",
+                    )
 
-            # Wait for all calibrations to complete
-            await asyncio.gather(*tasks)
+                # Update candidate calibration data
+                candidate["calibration"] = {
+                    "fit": calibration_data.fit,
+                    "reasoning": calibration_data.reasoning,
+                    "timestamp": datetime.now(UTC),
+                }
+
+                # Update job_data to include calibrated candidate info
+                if "calibrated_candidates" not in self.job_data:
+                    self.job_data["calibrated_candidates"] = []
+
+                new_calibration = {
+                    "candidate_id": candidate_id,
+                    "fit": calibration_data.fit,
+                    "reasoning": calibration_data.reasoning,
+                    "context": candidate.get("context", ""),
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+
+                # Update an existing record if it exists, otherwise append
+                existing = next(
+                    (
+                        item
+                        for item in self.job_data["calibrated_candidates"]
+                        if item["candidate_id"] == candidate_id
+                    ),
+                    None,
+                )
+                if existing:
+                    existing.update(new_calibration)
+                else:
+                    self.job_data["calibrated_candidates"].append(new_calibration)
+
+            # Persist all updates to job_data in Firestore
+            firestore.edit_job(self.job_id, self.user_id, self.job_data)
+
+            # Perform a single reevaluation of all candidates
+            await self.reevaluate_candidates()
 
         except Exception as e:
             logging.error(f"Error in bulk calibration: {str(e)}")
