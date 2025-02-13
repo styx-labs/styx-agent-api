@@ -10,9 +10,8 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 import services.firestore as firestore
-from models.base import Job, JobDescription
+from models.jobs import Job, JobDescription, Candidate
 from models.api import (
-    Candidate,
     BulkLinkedInPayload,
     ReachoutPayload,
     GetEmailPayload,
@@ -343,14 +342,12 @@ async def recalibrate_candidate(
             )
 
         processor = CandidateProcessor(job_id, job_data, user_id)
-        settings = {}
 
         background_tasks.add_task(
             processor.calibrate_candidate,
             candidate_id,
             payload.fit,
             payload.reasoning,
-            settings if settings else None,
         )
         return {"message": "Candidate recalibration started"}
     except Exception as e:
@@ -735,16 +732,28 @@ async def update_calibrated_profiles(
                 detail=f"Job with id {job_id} not found",
             )
 
-        # Update the calibrated profiles
+        # Get LinkedIn profiles for calibrated candidates
+        calibrated_profiles = get_calibrated_profiles_linkedin(
+            payload.calibrated_profiles
+        )
+
+        # Update the calibrated candidates
         job_data["calibrated_profiles"] = [
-            profile.model_dump() for profile in payload.calibrated_profiles
+            {
+                **profile.dict(),
+            }
+            for profile in calibrated_profiles
         ]
 
         # Update the job in Firestore
         firestore.edit_job(job_id, user_id, job_data)
 
-        return {"success": True}
+        return {
+            "calibrated_profiles": job_data["calibrated_profiles"],
+            "success": True,
+        }
     except Exception as e:
+        logging.error(f"Error updating calibrated candidates: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error updating calibrated profiles: {str(e)}",

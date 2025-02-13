@@ -27,6 +27,7 @@ class CalibratedProfiles(SerializableModel):
     fit: Optional[Literal["good", "bad"]] = None
     reasoning: Optional[str] = None
     profile: Optional[LinkedInProfile] = None
+    type: Literal["ideal", "pipeline"] = "pipeline"
 
     def __str__(self):
         output = ""
@@ -44,11 +45,11 @@ class Job(SerializableModel):
 
     job_description: str
     key_traits: List[KeyTrait]
-    calibrated_profiles: list[CalibratedProfiles] = None
+    calibrated_profiles: Optional[list[CalibratedProfiles]] = None
     job_title: str
     company_name: str
     created_at: datetime = Field(default_factory=datetime.now)
-    pipeline_feedback: list[PipelineFeedback] = None
+    pipeline_feedback: Optional[list[PipelineFeedback]] = None
 
 
 class JobDescription(SerializableModel):

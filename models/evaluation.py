@@ -1,13 +1,13 @@
-from typing import Union, List, Dict
-from typing_extensions import TypedDict
-from .base import SerializableModel, KeyTrait
+from typing import Union
+from .serializable import SerializableModel
 from .linkedin import LinkedInProfile
+from .jobs import Job, KeyTrait
 
 
 class KeyTraitsOutput(SerializableModel):
     """Output from key traits extraction"""
 
-    key_traits: List[KeyTrait]
+    key_traits: list[KeyTrait]
     job_title: str
     company_name: str
 
@@ -19,43 +19,33 @@ class TraitEvaluationOutput(SerializableModel):
     evaluation: str
 
 
-class EvaluationInputState(TypedDict):
+class SearchInputState(SerializableModel):
     """Input state for evaluation"""
 
-    job_description: str
-    candidate_context: str
-    candidate_profile: LinkedInProfile
-    candidate_full_name: str
-    key_traits: List[KeyTrait]
+    profile: LinkedInProfile
+    job: Job
     number_of_queries: int
     confidence_threshold: float
-    search_mode: bool
-    ideal_profiles: List[str]
     custom_instructions: str
 
 
-class CachedEvaluationInputState(TypedDict):
+class EvaluationInputState(SerializableModel):
     """Input state for cached evaluation"""
 
+    profile: LinkedInProfile
+    job: Job
     source_str: str
-    job_description: str
-    candidate_context: str
-    candidate_profile: LinkedInProfile
-    candidate_full_name: str
-    key_traits: List[KeyTrait]
-    citations: List[Dict]
-    ideal_profiles: List[str]
+    citations: list[dict]
     custom_instructions: str
 
 
-class EvaluationOutputState(TypedDict):
+class EvaluationOutputState(SerializableModel):
     """Output state from evaluation"""
 
-    citations: List[Dict]
-    sections: List[Dict]
+    citations: list[dict]
+    sections: list[dict]
     summary: str
     required_met: int
     optional_met: int
     source_str: str
-    candidate_profile: LinkedInProfile
     fit: int

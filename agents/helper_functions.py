@@ -10,7 +10,7 @@ from agents.prompts import (
 from agents.linkedin_processor import get_linkedin_profile_with_companies
 from services.firestore import get_user_templates
 from models.evaluation import KeyTraitsOutput
-from models.base import CalibratedProfiles
+from models.jobs import CalibratedProfiles
 
 
 @traceable(name="get_calibrated_profiles_linkedin")

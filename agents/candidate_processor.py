@@ -3,17 +3,18 @@ import asyncio
 from fastapi import HTTPException, status
 from agents.linkedin_processor import get_linkedin_profile_with_companies
 import services.firestore as firestore
-from models.base import KeyTrait, Candidate
+from models.jobs import KeyTrait, Candidate, CalibratedProfiles, PipelineFeedback
 import psutil
 import logging
 from datetime import datetime, UTC
 from services.evaluate import run_graph
 from services.firestore import get_custom_instructions
 from utils.linkedin_utils import extract_linkedin_id
-from models.linkedin import LinkedInProfile
 import uuid
 from fastapi.concurrency import run_in_threadpool
 from models.api import CandidateCalibrationPayload
+from models.jobs import Job
+from models.linkedin import LinkedInProfile
 
 
 class CandidateProcessor:
@@ -59,38 +60,17 @@ class CandidateProcessor:
                 {"status": "processing", "name": candidate_data["name"]},
             )
 
-            # Convert key_traits from dict to KeyTrait objects
-            key_traits = [KeyTrait(**trait) for trait in self.job_data["key_traits"]]
-
             if not candidate_data:
                 raise ValueError(
                     f"Could not fetch LinkedIn profile for {candidate_data['url']}"
                 )
 
+            if not isinstance(candidate_data["profile"], LinkedInProfile):
+                candidate_data["profile"] = LinkedInProfile(**candidate_data["profile"])
+
             # Run evaluation with all the necessary data
             graph_result = await run_graph(
-                job_description=(
-                    self.job_data["job_description"]
-                    + "\n\n"
-                    + "\n\n".join(
-                        [
-                            f"Pipeline Feedback: {fb.get('feedback')} - {fb.get('timestamp')}"
-                            for fb in self.job_data.get("pipeline_feedback", [])
-                        ]
-                    )
-                    + "\n\n"
-                    + "\n\n".join(
-                        [
-                            f"Candidate Calibration: Context: {cal.get('context')}, Score: {cal.get('fit')}, Reasoning: {cal.get('reasoning')}"
-                            for cal in self.job_data.get("calibrated_candidates", [])
-                        ]
-                    )
-                ),
-                candidate_context=candidate_data["context"],
-                candidate_full_name=candidate_data["name"],
                 profile=candidate_data["profile"],
-                key_traits=key_traits,
-                ideal_profiles=self.job_data["ideal_profiles"],
                 number_of_queries=candidate_data.get("number_of_queries", 0),
                 confidence_threshold=candidate_data.get("confidence_threshold", 0.0),
                 search_mode=candidate_data.get("search_mode", True),
@@ -102,9 +82,29 @@ class CandidateProcessor:
                     if get_custom_instructions(self.user_id)
                     else ""
                 ),
+                job=Job(
+                    job_description=self.job_data["job_description"],
+                    key_traits=[
+                        KeyTrait(**trait) for trait in self.job_data["key_traits"]
+                    ],
+                    calibrated_profiles=[
+                        CalibratedProfiles(**profile)
+                        for profile in (self.job_data.get("calibrated_profiles") or [])
+                    ],
+                    job_title=self.job_data["job_title"],
+                    company_name=self.job_data["company_name"],
+                    created_at=self.job_data.get("created_at"),
+                    pipeline_feedback=[
+                        PipelineFeedback(**feedback)
+                        for feedback in (self.job_data.get("pipeline_feedback") or [])
+                    ],
+                ),
             )
 
-            profile = LinkedInProfile(**graph_result["candidate_profile"]).dict()
+            profile = candidate_data["profile"]
+
+            if isinstance(profile, LinkedInProfile):
+                profile = profile.dict()
 
             # Always update candidate data and create in Firestore
             update_data = {"profile": profile}
@@ -325,7 +325,6 @@ class CandidateProcessor:
         candidate_id: str,
         fit: str,
         reasoning: str,
-        settings: Optional[Dict] = None,
     ) -> None:
         """Calibrate a single candidate and optionally update evaluation settings"""
         try:
@@ -339,42 +338,32 @@ class CandidateProcessor:
                     detail=f"Candidate with id {candidate_id} not found",
                 )
 
-            # Update candidate calibration data
-            candidate["calibration"] = {
-                "fit": fit,
-                "reasoning": reasoning,
-                "timestamp": datetime.now(UTC),
-            }
-
-            # Update settings if provided
-            if settings:
-                candidate.update(settings)
-
             # Update job_data to include calibrated candidate info
-            if "calibrated_candidates" not in self.job_data:
-                self.job_data["calibrated_candidates"] = []
+            if "calibrated_profiles" not in self.job_data:
+                self.job_data["calibrated_profiles"] = []
 
+            # Create a CalibratedProfiles object
             new_calibration = {
-                "candidate_id": candidate_id,
+                "url": candidate.get("url", ""),
                 "fit": fit,
                 "reasoning": reasoning,
-                "context": candidate.get("context", ""),
-                "timestamp": datetime.now(UTC).isoformat(),
+                "profile": candidate.get("profile"),
+                "type": "pipeline",  # Mark as pipeline calibration
             }
 
             # Update an existing record if it exists, otherwise append
             existing = next(
                 (
                     item
-                    for item in self.job_data["calibrated_candidates"]
-                    if item["candidate_id"] == candidate_id
+                    for item in self.job_data["calibrated_profiles"]
+                    if item.get("url") == candidate.get("url")
                 ),
                 None,
             )
             if existing:
                 existing.update(new_calibration)
             else:
-                self.job_data["calibrated_candidates"].append(new_calibration)
+                self.job_data["calibrated_profiles"].append(new_calibration)
 
             # Persist the updated job_data in Firestore
             firestore.edit_job(self.job_id, self.user_id, self.job_data)
@@ -406,38 +395,32 @@ class CandidateProcessor:
                         detail=f"Candidate with id {candidate_id} not found",
                     )
 
-                # Update candidate calibration data
-                candidate["calibration"] = {
-                    "fit": calibration_data.fit,
-                    "reasoning": calibration_data.reasoning,
-                    "timestamp": datetime.now(UTC),
-                }
-
                 # Update job_data to include calibrated candidate info
-                if "calibrated_candidates" not in self.job_data:
-                    self.job_data["calibrated_candidates"] = []
+                if "calibrated_profiles" not in self.job_data:
+                    self.job_data["calibrated_profiles"] = []
 
+                # Create a CalibratedProfiles object
                 new_calibration = {
-                    "candidate_id": candidate_id,
+                    "url": candidate.get("url", ""),
                     "fit": calibration_data.fit,
                     "reasoning": calibration_data.reasoning,
-                    "context": candidate.get("context", ""),
-                    "timestamp": datetime.now(UTC).isoformat(),
+                    "profile": candidate.get("profile"),
+                    "type": "pipeline",  # Mark as pipeline calibration
                 }
 
                 # Update an existing record if it exists, otherwise append
                 existing = next(
                     (
                         item
-                        for item in self.job_data["calibrated_candidates"]
-                        if item["candidate_id"] == candidate_id
+                        for item in self.job_data["calibrated_profiles"]
+                        if item.get("url") == candidate.get("url")
                     ),
                     None,
                 )
                 if existing:
                     existing.update(new_calibration)
                 else:
-                    self.job_data["calibrated_candidates"].append(new_calibration)
+                    self.job_data["calibrated_profiles"].append(new_calibration)
 
             # Persist all updates to job_data in Firestore
             firestore.edit_job(self.job_id, self.user_id, self.job_data)

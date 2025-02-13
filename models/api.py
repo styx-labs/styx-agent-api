@@ -1,5 +1,6 @@
 from typing import List, Dict
-from .base import SerializableModel, Candidate, CalibratedProfiles
+from .serializable import SerializableModel
+from .jobs import Candidate, CalibratedProfiles
 
 
 class EditKeyTraitsPayload(SerializableModel):
