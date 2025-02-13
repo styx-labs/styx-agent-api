@@ -74,3 +74,32 @@ def get_linkedin_profile_with_companies(
     except Exception as e:
         logging.error(f"Failed to get LinkedIn profile for URL {url}: {str(e)}")
         raise
+
+
+def analyze_latest_experience(profile: LinkedInProfile, lookup_table: dict) -> dict:
+    """
+    Analyze the latest job experience to determine level and income.
+
+    Args:
+        profile (LinkedInProfile): The LinkedIn profile object.
+        lookup_table (dict): A dictionary containing role, level, location, and company data.
+
+    Returns:
+        dict: A dictionary containing the level and income information.
+    """
+    if not profile.experiences:
+        return {"level": None, "income": None}
+
+    # Get the latest experience (assuming experiences are sorted by date)
+    latest_experience = profile.experiences[0]
+
+    # Extract relevant fields
+    role = latest_experience.title
+    company = latest_experience.company
+    location = latest_experience.location
+
+    # Perform lookup
+    key = (role, company, location)
+    level_income_data = lookup_table.get(key, {"level": None, "income": None})
+
+    return level_income_data

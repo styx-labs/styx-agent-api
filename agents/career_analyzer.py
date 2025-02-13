@@ -20,6 +20,14 @@ EXCLUDED_TITLE_TERMS = {
     "scholar",
     "student",
     "summer",
+    "advisor",
+    "board member",
+    "board advisor",
+    "board observer",
+    "board of director",
+    "board of directors",
+    "board of trustees",
+    "board of trustees",
 }
 EXCLUDED_ASSISTANT_TERMS = {
     "research assistant",
