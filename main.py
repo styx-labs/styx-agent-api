@@ -36,7 +36,6 @@ from agents.candidate_processor import CandidateProcessor
 from services.stripe import create_checkout_session
 import logging
 import sys
-from typing import Optional
 from services.firestore import (
     get_user_templates,
     set_user_templates,
@@ -198,7 +197,7 @@ async def create_candidate(
 @app.get("/jobs/{job_id}/candidates")
 def get_candidates(
     job_id: str,
-    filter_traits: Optional[list[str]] = Query(
+    filter_traits: list[str] | None = Query(
         None, description="List of traits to filter by"
     ),
     user_id: str = Depends(validate_user_id),

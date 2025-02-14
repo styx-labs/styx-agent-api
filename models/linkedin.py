@@ -3,7 +3,6 @@ LinkedIn data models with standardized serialization.
 """
 
 import re
-from typing import Optional
 from datetime import date
 from .serializable import SerializableModel
 from .career import (
@@ -16,48 +15,48 @@ from services.firestore import db
 class CompanyLocation(SerializableModel):
     """Model for company location data."""
 
-    city: Optional[str] = None
-    country: Optional[str] = None
-    is_hq: Optional[bool] = False
-    line_1: Optional[str] = None
-    postal_code: Optional[str] = None
-    state: Optional[str] = None
+    city: str | None
+    country: str | None
+    is_hq: bool
+    line_1: str | None
+    postal_code: str | None
+    state: str | None
 
 
 class AffiliatedCompany(SerializableModel):
     """Model for affiliated company data."""
 
-    industry: Optional[str] = None
+    industry: str | None
     link: str
-    location: Optional[str] = None
+    location: str | None
     name: str
 
 
 class CompanyUpdate(SerializableModel):
     """Model for company update data."""
 
-    article_link: Optional[str] = None
-    image: Optional[str] = None
-    posted_on: Optional[dict] = None
-    text: Optional[str] = None
-    total_likes: Optional[int] = None
+    article_link: str | None
+    image: str | None
+    posted_on: dict | None
+    text: str | None
+    total_likes: int | None
 
 
 class Investor(SerializableModel):
     """Model for investor data."""
 
-    linkedin_profile_url: Optional[str] = None
+    linkedin_profile_url: str | None
     name: str
-    type: Optional[str] = None
+    type: str | None
 
 
 class Funding(SerializableModel):
     """Model for funding round data."""
 
-    funding_type: Optional[str] = None
-    money_raised: Optional[int] = None
-    announced_date: Optional[dict] = None
-    number_of_investors: Optional[int] = None
+    funding_type: str | None
+    money_raised: int | None
+    announced_date: dict | None
+    number_of_investors: int | None
     investor_list: list[Investor] = []
 
 
@@ -65,27 +64,27 @@ class LinkedInCompany(SerializableModel):
     """Model for LinkedIn company profile data from Proxycurl API."""
 
     company_name: str
-    description: Optional[str] = None
-    website: Optional[str] = None
-    industry: Optional[str] = None
-    company_size: Optional[list[Optional[int]]] = None
-    company_size_on_linkedin: Optional[int] = None
-    company_type: Optional[str] = None
-    founded_year: Optional[int] = None
-    specialties: Optional[list[str]] = []
+    description: str | None
+    website: str | None
+    industry: str | None
+    company_size: list[int | None] | None
+    company_size_on_linkedin: int | None
+    company_type: str | None
+    founded_year: int | None
+    specialties: list[str] = []
     locations: list[CompanyLocation] = []
-    hq: Optional[CompanyLocation] = None
-    follower_count: Optional[int] = None
-    profile_pic_url: Optional[str] = None
-    background_cover_image_url: Optional[str] = None
-    tagline: Optional[str] = None
-    universal_name_id: Optional[str] = None
-    linkedin_internal_id: Optional[str] = None
-    search_id: Optional[str] = None
+    hq: CompanyLocation | None
+    follower_count: int | None
+    profile_pic_url: str | None
+    background_cover_image_url: str | None
+    tagline: str | None
+    universal_name_id: str | None
+    linkedin_internal_id: str | None
+    search_id: str | None
     updates: list[CompanyUpdate] = []
     similar_companies: list[AffiliatedCompany] = []
     affiliated_companies: list[AffiliatedCompany] = []
-    funding_data: Optional[list[Funding]] = None
+    funding_data: list[Funding] | None
 
     def _determine_funding_stage(self, funding) -> FundingStage:
         """Helper method to determine funding stage from a funding round."""
@@ -225,19 +224,19 @@ class AILinkedinJobDescription(SerializableModel):
 
 
 class LinkedInExperience(SerializableModel):
-    title: Optional[str] = None
-    company: Optional[str] = None
-    description: Optional[str] = None
-    starts_at: Optional[date] = None
-    ends_at: Optional[date] = None
-    location: Optional[str] = None
-    company_linkedin_profile_url: Optional[str] = None
-    company_data: Optional[LinkedInCompany] = None
-    summarized_job_description: Optional[AILinkedinJobDescription] = None
-    experience_tags: Optional[list[str]] = None
+    title: str | None
+    company: str | None
+    description: str | None
+    starts_at: date | None
+    ends_at: date | None
+    location: str | None
+    company_linkedin_profile_url: str | None
+    company_data: LinkedInCompany | None
+    summarized_job_description: AILinkedinJobDescription | None
+    experience_tags: list[str] | None
 
     @property
-    def funding_stages_during_tenure(self) -> Optional[list[FundingStage]]:
+    def funding_stages_during_tenure(self) -> list[FundingStage] | None:
         """Calculate the funding stages of the company during this person's tenure."""
         if not self.company_linkedin_profile_url:
             return []
@@ -264,7 +263,7 @@ class LinkedInExperience(SerializableModel):
         )
 
     @property
-    def duration_months(self) -> Optional[int]:
+    def duration_months(self) -> int | None:
         """Calculate the duration of this experience in months."""
         if not self.starts_at:
             return None
@@ -296,16 +295,16 @@ class LinkedInExperience(SerializableModel):
 
 
 class LinkedInEducation(SerializableModel):
-    school: Optional[str] = None
-    degree_name: Optional[str] = None
-    field_of_study: Optional[str] = None
-    starts_at: Optional[date] = None
-    ends_at: Optional[date] = None
-    school_linkedin_profile_url: Optional[str] = None
-    logo_url: Optional[str] = None
+    school: str | None
+    degree_name: str | None
+    field_of_study: str | None
+    starts_at: date | None
+    ends_at: date | None
+    school_linkedin_profile_url: str | None
+    logo_url: str | None
 
     @property
-    def school_id(self) -> Optional[str]:
+    def school_id(self) -> str | None:
         """Get the LinkedIn school ID."""
         from agents.constants import extract_school_id
 
@@ -320,7 +319,7 @@ class LinkedInEducation(SerializableModel):
         return extract_school_id(self.school_linkedin_profile_url)
 
     @property
-    def university_tier(self) -> Optional[str]:
+    def university_tier(self) -> str | None:
         """Get the ranking tier of the university."""
         from agents.constants import get_university_tier_by_id
 
@@ -338,15 +337,15 @@ class LinkedInEducation(SerializableModel):
 
 class LinkedInProfile(SerializableModel):
     full_name: str
-    occupation: Optional[str] = None
-    headline: Optional[str] = None
-    summary: Optional[str] = None
-    city: Optional[str] = None
-    country: Optional[str] = None
+    occupation: str | None
+    headline: str | None
+    summary: str | None
+    city: str | None
+    country: str | None
     public_identifier: str
     experiences: list[LinkedInExperience] = []
     education: list[LinkedInEducation] = []
-    career_metrics: Optional[CareerMetrics] = None
+    career_metrics: CareerMetrics | None
 
     def analyze_career(self) -> None:
         """

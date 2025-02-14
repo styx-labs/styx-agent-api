@@ -1,4 +1,4 @@
-from typing import Optional, Any
+from typing import Any
 from openai import AzureOpenAI
 from langchain_openai import AzureChatOpenAI
 from langchain_core.language_models import BaseLanguageModel
@@ -74,7 +74,7 @@ llm = LLMWithFallbacks(openai_4o, [gemini_2_flash])
 llm_fast = LLMWithFallbacks(openai_4o_mini, [gemini_2_flash])
 
 
-def get_azure_openai() -> Optional[AzureOpenAI]:
+def get_azure_openai() -> AzureOpenAI:
     return AzureOpenAI(
         api_key=get_secret("azure-openai-api-key", "1"),
         api_version="2024-08-01-preview",

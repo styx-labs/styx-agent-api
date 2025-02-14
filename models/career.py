@@ -1,4 +1,3 @@
-from typing import Optional, Tuple
 from datetime import date
 from enum import Enum
 from .serializable import SerializableModel
@@ -51,7 +50,7 @@ class ExperienceStageMetrics(SerializableModel):
     company_name: str
     funding_stage: FundingStage
     joined_at: date
-    left_at: Optional[date]
+    left_at: date | None
     duration_months: int
     company_tier: CompanyTier
 
@@ -231,11 +230,11 @@ class TechStackPatterns:
 class CareerMetrics(SerializableModel):
     """Model for career analysis metrics."""
 
-    total_experience_months: Optional[int] = None
-    average_tenure_months: Optional[int] = None
-    current_tenure_months: Optional[int] = None
-    tech_stacks: Optional[list[str]] = None
-    career_tags: Optional[list[str]] = None
-    experience_tags: Optional[list[str]] = None
-    latest_experience_level: Optional[str] = None
-    latest_experience_income: Optional[Tuple[float, float]] = None
+    total_experience_months: int | None
+    average_tenure_months: int | None
+    current_tenure_months: int | None
+    tech_stacks: list[str] | None
+    career_tags: list[str] | None
+    experience_tags: list[str] | None
+    latest_experience_level: str | None
+    latest_experience_income: tuple[float, float] | None

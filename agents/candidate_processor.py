@@ -1,4 +1,3 @@
-from typing import Optional
 import asyncio
 from fastapi import HTTPException, status
 from agents.linkedin_processor import get_linkedin_profile_with_companies
@@ -171,7 +170,7 @@ class CandidateProcessor:
                 detail=f"Error running candidate evaluation: {str(e)}",
             )
 
-    def get_candidate_record(self, candidate_data: dict) -> Optional[dict]:
+    def get_candidate_record(self, candidate_data: dict) -> dict | None:
         """Get candidate record from LinkedIn URL with enriched company data."""
         try:
             public_id = extract_linkedin_id(candidate_data["url"])
@@ -294,7 +293,7 @@ class CandidateProcessor:
         return id
 
     async def apply_pipeline_feedback(
-        self, feedback: str, settings: Optional[dict] = None
+        self, feedback: str, settings: dict | None = None
     ) -> None:
         """Apply pipeline-level feedback and recalibrate all candidates"""
         try:

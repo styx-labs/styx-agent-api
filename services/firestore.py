@@ -6,7 +6,6 @@ from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
 import sys
 from agents.search_credits import free_searches
 from datetime import datetime, timedelta, UTC
-from typing import Optional
 from models.templates import UserTemplates
 from models.instructions import CustomInstructions
 import logging
@@ -233,7 +232,7 @@ def create_candidate(candidate_data: dict) -> str:
 
 
 def get_candidates(
-    job_id: str, user_id: str, filter_traits: Optional[list[str]] = None
+    job_id: str, user_id: str, filter_traits: list[str] | None = None
 ) -> list:
     """Get all candidates for a specific job, sorted by match criteria."""
     # Get all job-specific candidate data in one batch
