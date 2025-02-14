@@ -1,4 +1,4 @@
-from typing import List, Optional, Literal
+from typing import Optional, Literal
 from datetime import datetime
 from pydantic import Field
 from .serializable import SerializableModel
@@ -44,7 +44,7 @@ class Job(SerializableModel):
     """Represents a job posting"""
 
     job_description: str
-    key_traits: List[KeyTrait]
+    key_traits: list[KeyTrait]
     calibrated_profiles: Optional[list[CalibratedProfiles]] = None
     job_title: str
     company_name: str
@@ -56,7 +56,7 @@ class JobDescription(SerializableModel):
     """Represents a job description"""
 
     description: str
-    calibrated_profiles: List[CalibratedProfiles] = None
+    calibrated_profiles: Optional[list[CalibratedProfiles]] = None
 
 
 class Candidate(SerializableModel):

@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional
+from typing import Optional
 import asyncio
 from fastapi import HTTPException, status
 from agents.linkedin_processor import get_linkedin_profile_with_companies
@@ -41,7 +41,7 @@ class CandidateProcessor:
             f"VMS: {memory_info.vms / 1024 / 1024:.2f}MB"
         )
 
-    async def process_single_candidate(self, candidate_data: Dict) -> None:
+    async def process_single_candidate(self, candidate_data: dict) -> None:
         """Process a single candidate with evaluation"""
         try:
             logging.info(
@@ -171,7 +171,7 @@ class CandidateProcessor:
                 detail=f"Error running candidate evaluation: {str(e)}",
             )
 
-    def get_candidate_record(self, candidate_data: Dict) -> Optional[Dict]:
+    def get_candidate_record(self, candidate_data: dict) -> Optional[dict]:
         """Get candidate record from LinkedIn URL with enriched company data."""
         try:
             public_id = extract_linkedin_id(candidate_data["url"])
@@ -234,7 +234,7 @@ class CandidateProcessor:
             print(f"Error getting candidate record: {str(e)}")
             return None
 
-    async def process_urls(self, urls: List[str], search_mode: bool = True) -> None:
+    async def process_urls(self, urls: list[str], search_mode: bool = True) -> None:
         """Process a list of LinkedIn URLs in bulk."""
         try:
             logging.info(f"Processing {len(urls)} LinkedIn URLs")
@@ -294,7 +294,7 @@ class CandidateProcessor:
         return id
 
     async def apply_pipeline_feedback(
-        self, feedback: str, settings: Optional[Dict] = None
+        self, feedback: str, settings: Optional[dict] = None
     ) -> None:
         """Apply pipeline-level feedback and recalibrate all candidates"""
         try:
@@ -383,7 +383,7 @@ class CandidateProcessor:
             )
 
     async def bulk_calibrate_candidates(
-        self, feedback: Dict[str, CandidateCalibrationPayload]
+        self, feedback: dict[str, CandidateCalibrationPayload]
     ) -> None:
         """Calibrate multiple candidates in bulk"""
         try:

@@ -6,7 +6,7 @@ from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
 import sys
 from agents.search_credits import free_searches
 from datetime import datetime, timedelta, UTC
-from typing import List, Dict, Optional
+from typing import Optional
 from models.templates import UserTemplates
 from models.instructions import CustomInstructions
 import logging
@@ -233,7 +233,7 @@ def create_candidate(candidate_data: dict) -> str:
 
 
 def get_candidates(
-    job_id: str, user_id: str, filter_traits: Optional[List[str]] = None
+    job_id: str, user_id: str, filter_traits: Optional[list[str]] = None
 ) -> list:
     """Get all candidates for a specific job, sorted by match criteria."""
     # Get all job-specific candidate data in one batch
@@ -297,7 +297,7 @@ def get_candidates(
     return loading_indicators + sorted_candidates
 
 
-def _meets_trait_requirements(sections: List[Dict], required_traits: List[str]) -> bool:
+def _meets_trait_requirements(sections: list[dict], required_traits: list[str]) -> bool:
     """Check if candidate meets all required trait requirements."""
     trait_values = {
         section["section"]: section["value"]
@@ -488,7 +488,7 @@ def toggle_candidate_favorite(job_id: str, candidate_id: str, user_id: str) -> b
 
 
 def bulk_remove_candidates_from_job(
-    job_id: str, candidate_ids: List[str], user_id: str
+    job_id: str, candidate_ids: list[str], user_id: str
 ) -> bool:
     """Remove multiple candidates from a job efficiently using batched writes"""
     batch = db.batch()
@@ -520,7 +520,7 @@ def bulk_remove_candidates_from_job(
 
 
 def bulk_favorite_candidates(
-    job_id: str, candidate_ids: List[str], user_id: str, favorite_status: bool = True
+    job_id: str, candidate_ids: list[str], user_id: str, favorite_status: bool = True
 ) -> bool:
     """Set favorite status for multiple candidates efficiently using batched writes"""
     batch = db.batch()

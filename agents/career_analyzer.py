@@ -2,7 +2,7 @@
 Career analysis functions for LinkedIn profiles.
 """
 
-from typing import List, Dict, Tuple
+from typing import Tuple
 from datetime import date
 from collections import defaultdict
 from models.linkedin import LinkedInProfile, LinkedInExperience
@@ -28,6 +28,7 @@ EXCLUDED_TITLE_TERMS = {
     "board of directors",
     "board of trustees",
     "board of trustees",
+    "tutor",
 }
 EXCLUDED_ASSISTANT_TERMS = {
     "research assistant",
@@ -41,7 +42,7 @@ def months_between(start: date, end: date) -> int:
     return (end.year - start.year) * 12 + (end.month - start.month)
 
 
-def analyze_career(profile: LinkedInProfile) -> CareerMetrics:
+def analyze_career(profile: LinkedInProfile, lookup_table: dict) -> CareerMetrics:
     """Compute career metrics from a LinkedIn profile."""
     professional_experiences = [
         exp
@@ -57,6 +58,9 @@ def analyze_career(profile: LinkedInProfile) -> CareerMetrics:
     career_tags += generate_promotion_tags(professional_experiences)
     experience_tags = generate_experience_tags(professional_experiences)
 
+    # Analyze the latest experience for level and income
+    latest_experience_data = analyze_latest_experience(profile, lookup_table)
+
     return CareerMetrics(
         total_experience_months=total_months,
         average_tenure_months=avg_tenure,
@@ -64,6 +68,8 @@ def analyze_career(profile: LinkedInProfile) -> CareerMetrics:
         tech_stacks=[],
         career_tags=career_tags,
         experience_tags=experience_tags,
+        latest_experience_level=latest_experience_data["level"],
+        latest_experience_income=latest_experience_data["income"],
     )
 
 
@@ -90,7 +96,7 @@ def is_professional_experience(exp: LinkedInExperience, education=None) -> bool:
     return True
 
 
-def calculate_total_months(pro_exps: List[LinkedInExperience]) -> int:
+def calculate_total_months(pro_exps: list[LinkedInExperience]) -> int:
     """
     Calculate unique months of experience by merging overlapping intervals
     across all roles (regardless of company).
@@ -120,8 +126,8 @@ def calculate_total_months(pro_exps: List[LinkedInExperience]) -> int:
 
 
 def merge_experiences_by_company(
-    pro_exps: List[LinkedInExperience],
-) -> Dict[str, List[Tuple[date, date]]]:
+    pro_exps: list[LinkedInExperience],
+) -> dict[str, list[tuple[date, date]]]:
     """
     Group experiences by company and merge adjacent/overlapping intervals.
     This ensures that multiple roles at the same company (when contiguous)
@@ -134,7 +140,7 @@ def merge_experiences_by_company(
             end = exp.ends_at or date.today()
             company_intervals[exp.company].append((start, end))
 
-    merged: Dict[str, List[Tuple[date, date]]] = {}
+    merged: dict[str, list[tuple[date, date]]] = {}
     for company, intervals in company_intervals.items():
         intervals.sort(key=lambda x: x[0])
         merged_intervals = []
@@ -151,7 +157,7 @@ def merge_experiences_by_company(
     return merged
 
 
-def calculate_average_tenure_months(pro_exps: List[LinkedInExperience]) -> int:
+def calculate_average_tenure_months(pro_exps: list[LinkedInExperience]) -> int:
     """
     Calculate average tenure (in months) per company after merging adjacent roles.
     This prevents penalizing candidates with multiple contiguous roles at the same company.
@@ -168,7 +174,7 @@ def calculate_average_tenure_months(pro_exps: List[LinkedInExperience]) -> int:
     return round(sum(tenures) / len(tenures))
 
 
-def calculate_current_tenure_months(pro_exps: List[LinkedInExperience]) -> int:
+def calculate_current_tenure_months(pro_exps: list[LinkedInExperience]) -> int:
     """
     Calculate the current tenure (in months) for the active role(s) at a company.
     If multiple current roles exist in the same company, they are merged.
@@ -197,8 +203,8 @@ def calculate_current_tenure_months(pro_exps: List[LinkedInExperience]) -> int:
 
 
 def generate_tenure_tags(
-    pro_exps: List[LinkedInExperience], avg_tenure: int
-) -> List[str]:
+    pro_exps: list[LinkedInExperience], avg_tenure: int
+) -> list[str]:
     """
     Generate tags based on tenure patterns and company diversity.
     """
@@ -221,7 +227,7 @@ def generate_tenure_tags(
     return tags
 
 
-def generate_promotion_tags(pro_exps: List[LinkedInExperience]) -> List[str]:
+def generate_promotion_tags(pro_exps: list[LinkedInExperience]) -> list[str]:
     """
     Generate promotion tags based on number of titles held at each company.
     """
@@ -245,7 +251,7 @@ def generate_promotion_tags(pro_exps: List[LinkedInExperience]) -> List[str]:
     return []
 
 
-def generate_experience_tags(pro_exps: List[LinkedInExperience]) -> List[str]:
+def generate_experience_tags(pro_exps: list[LinkedInExperience]) -> list[str]:
     """
     Generate tags based on company type and funding stage.
     """
@@ -288,3 +294,32 @@ def generate_experience_tags(pro_exps: List[LinkedInExperience]) -> List[str]:
                 tags.add("Public Company Experience")
 
     return list(tags)
+
+
+def analyze_latest_experience(profile: LinkedInProfile, lookup_table: dict) -> dict:
+    """
+    Analyze the latest job experience to determine level and income.
+
+    Args:
+        profile (LinkedInProfile): The LinkedIn profile object.
+        lookup_table (dict): A dictionary containing role, level, location, and company data.
+
+    Returns:
+        dict: A dictionary containing the level and income information.
+    """
+    if not profile.experiences:
+        return {"level": None, "income": None}
+
+    # Get the latest experience (assuming experiences are sorted by date)
+    latest_experience = profile.experiences[0]
+
+    # Extract relevant fields
+    role = latest_experience.title
+    company = latest_experience.company
+    location = latest_experience.location
+
+    # Perform lookup
+    key = (role, company, location)
+    level_income_data = lookup_table.get(key, {"level": None, "income": None})
+
+    return level_income_data

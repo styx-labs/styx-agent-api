@@ -1,4 +1,4 @@
-from typing import List, Set, Optional
+from typing import Optional, Tuple
 from datetime import date
 from enum import Enum
 from .serializable import SerializableModel
@@ -196,7 +196,7 @@ class TechStackPatterns:
     }
 
     @classmethod
-    def detect_tech_stacks(cls, text: str) -> Set[TechStack]:
+    def detect_tech_stacks(cls, text: str) -> set[TechStack]:
         """Detect tech stacks from text description."""
         text = text.lower()
         stacks = set()
@@ -234,17 +234,8 @@ class CareerMetrics(SerializableModel):
     total_experience_months: Optional[int] = None
     average_tenure_months: Optional[int] = None
     current_tenure_months: Optional[int] = None
-    tech_stacks: Optional[List[str]] = None
-    career_tags: Optional[List[str]] = None
-    experience_tags: Optional[List[str]] = None
-
-    def to_dict(self) -> dict:
-        """Convert career metrics to a dictionary format."""
-        return {
-            "total_experience_months": self.total_experience_months,
-            "average_tenure_months": self.average_tenure_months,
-            "current_tenure_months": self.current_tenure_months,
-            "tech_stacks": self.tech_stacks,
-            "career_tags": self.career_tags,
-            "experience_tags": self.experience_tags,
-        }
+    tech_stacks: Optional[list[str]] = None
+    career_tags: Optional[list[str]] = None
+    experience_tags: Optional[list[str]] = None
+    latest_experience_level: Optional[str] = None
+    latest_experience_income: Optional[Tuple[float, float]] = None
