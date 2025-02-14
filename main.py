@@ -101,8 +101,8 @@ async def validate_user_id(authorization: str = Header(None)):
 @app.post("/jobs")
 def create_job(job: Job, user_id: str = Depends(validate_user_id)):
     try:
-        job_data = job.dict()
-        job_id = firestore.create_job(job_data, user_id)
+        # job_data = job.dict()
+        job_id = firestore.create_job(job.model_dump(), user_id)
         return {"job_id": job_id}
     except Exception as e:
         raise HTTPException(

@@ -448,7 +448,7 @@ def get_custom_instructions(user_id: str) -> CustomInstructions:
     doc = settings_ref.document("evaluation_instructions").get()
 
     return CustomInstructions(
-        evaluation_instructions=doc.get("content") if doc.exists else None
+        evaluation_instructions=doc.get("content") if doc.exists else ""
     )
 
 

@@ -10,6 +10,7 @@ from .career import (
     CareerMetrics,
     FundingStage,
 )
+from services.firestore import db
 
 
 class CompanyLocation(SerializableModel):
@@ -158,7 +159,7 @@ class LinkedInCompany(SerializableModel):
 
     def get_funding_stages_between_dates(
         self, start_date: date, end_date: date = None, cutoff_date: date = None
-    ) -> List[FundingStage]:
+    ) -> list[FundingStage]:
         """Get the sequence of funding stages between two dates.
 
         Args:
@@ -167,7 +168,7 @@ class LinkedInCompany(SerializableModel):
             cutoff_date: Optional date before which to ignore funding rounds
         """
         if not self.funding_data:
-            return [FundingStage.UNKNOWN]
+            return []
 
         end_date = end_date or date.today()
         relevant_rounds = []
@@ -213,7 +214,7 @@ class LinkedInCompany(SerializableModel):
             except (KeyError, ValueError, TypeError):
                 continue
 
-        return [current_stage] + relevant_rounds if relevant_rounds else [current_stage]
+        return list(dict.fromkeys([current_stage] + relevant_rounds))
 
 
 class AILinkedinJobDescription(SerializableModel):
@@ -233,13 +234,25 @@ class LinkedInExperience(SerializableModel):
     company_linkedin_profile_url: Optional[str] = None
     company_data: Optional[LinkedInCompany] = None
     summarized_job_description: Optional[AILinkedinJobDescription] = None
-    experience_tags: Optional[List[str]] = None
+    experience_tags: Optional[list[str]] = None
 
     @property
-    def funding_stages_during_tenure(self) -> List[FundingStage]:
+    def funding_stages_during_tenure(self) -> Optional[list[FundingStage]]:
         """Calculate the funding stages of the company during this person's tenure."""
-        if not self.company_data or not self.starts_at:
-            return [FundingStage.UNKNOWN]
+        if not self.company_linkedin_profile_url:
+            return []
+
+        if not self.company_data and "school" not in self.company_linkedin_profile_url:
+            company_id = re.search(
+                r"linkedin\.com/company/([^/?]+)", self.company_linkedin_profile_url
+            ).group(1)
+            company_data = db.collection("companies").document(company_id).get()
+
+            if company_data:
+                self.company_data = LinkedInCompany(**company_data.to_dict())
+
+        if not self.starts_at or not self.company_data:
+            return []
 
         # Calculate cutoff date (2 years before start date)
         two_years_before = date(
@@ -274,9 +287,10 @@ class LinkedInExperience(SerializableModel):
 
         # Add calculated fields
         d["duration_months"] = self.duration_months
-        d["funding_stages_during_tenure"] = [
-            stage.value for stage in self.funding_stages_during_tenure
-        ]
+        if self.funding_stages_during_tenure:
+            d["funding_stages_during_tenure"] = [
+                stage.value for stage in self.funding_stages_during_tenure
+            ]
 
         return d
 
