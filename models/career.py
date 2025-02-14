@@ -237,4 +237,5 @@ class CareerMetrics(SerializableModel):
     career_tags: list[str] | None
     experience_tags: list[str] | None
     latest_experience_level: str | None
+    latest_experience_track: str | None
     latest_experience_income: tuple[float, float] | None

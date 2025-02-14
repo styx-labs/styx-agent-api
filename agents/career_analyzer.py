@@ -2,12 +2,17 @@
 Career analysis functions for LinkedIn profiles.
 """
 
-from typing import Tuple
 from datetime import date
 from collections import defaultdict
 from models.linkedin import LinkedInProfile, LinkedInExperience
 from models.career import CareerMetrics
 from .constants import unicorns, big_tech, quant
+from .career_levels import (
+    determine_career_level_llm,
+    determine_location_tier_llm,
+    determine_company_type_llm,
+)
+from .income_estimator import estimate_income_range
 
 # Constants for filtering experience titles
 EXCLUDED_TITLE_TERMS = {
@@ -42,7 +47,7 @@ def months_between(start: date, end: date) -> int:
     return (end.year - start.year) * 12 + (end.month - start.month)
 
 
-def analyze_career(profile: LinkedInProfile, lookup_table: dict) -> CareerMetrics:
+def analyze_career(profile: LinkedInProfile) -> CareerMetrics:
     """Compute career metrics from a LinkedIn profile."""
     professional_experiences = [
         exp
@@ -59,7 +64,7 @@ def analyze_career(profile: LinkedInProfile, lookup_table: dict) -> CareerMetric
     experience_tags = generate_experience_tags(professional_experiences)
 
     # Analyze the latest experience for level and income
-    latest_experience_data = analyze_latest_experience(profile, lookup_table)
+    latest_experience_data = analyze_latest_experience(profile)
 
     return CareerMetrics(
         total_experience_months=total_months,
@@ -69,6 +74,7 @@ def analyze_career(profile: LinkedInProfile, lookup_table: dict) -> CareerMetric
         career_tags=career_tags,
         experience_tags=experience_tags,
         latest_experience_level=latest_experience_data["level"],
+        latest_experience_track=latest_experience_data["track"],
         latest_experience_income=latest_experience_data["income"],
     )
 
@@ -296,30 +302,46 @@ def generate_experience_tags(pro_exps: list[LinkedInExperience]) -> list[str]:
     return list(tags)
 
 
-def analyze_latest_experience(profile: LinkedInProfile, lookup_table: dict) -> dict:
-    """
-    Analyze the latest job experience to determine level and income.
-
-    Args:
-        profile (LinkedInProfile): The LinkedIn profile object.
-        lookup_table (dict): A dictionary containing role, level, location, and company data.
-
-    Returns:
-        dict: A dictionary containing the level and income information.
-    """
+def analyze_latest_experience(profile: LinkedInProfile) -> dict:
+    """Analyze the latest job experience to determine level and income."""
     if not profile.experiences:
-        return {"level": None, "income": None}
+        return {"level": None, "track": None, "income": None}
 
-    # Get the latest experience (assuming experiences are sorted by date)
     latest_experience = profile.experiences[0]
-
-    # Extract relevant fields
     role = latest_experience.title
     company = latest_experience.company
-    location = latest_experience.location
+    location = latest_experience.location or f"{profile.city}, {profile.country}"
 
-    # Perform lookup
-    key = (role, company, location)
-    level_income_data = lookup_table.get(key, {"level": None, "income": None})
+    # Get company description if available
+    company_description = getattr(latest_experience, "company_description", "")
 
-    return level_income_data
+    # Determine career level and track using LLM
+    level, track = determine_career_level_llm(role, company)
+
+    # Determine location tier and country using LLM
+    location_tier, country = determine_location_tier_llm(location)
+
+    # Determine company type using LLM
+    company_type = determine_company_type_llm(company, company_description)
+
+    # Estimate income range with detailed breakdown
+    min_total, max_total, comp_breakdown = estimate_income_range(
+        level=level,
+        track=track,
+        location=location_tier,
+        country=country,
+        company_type=company_type,
+    )
+
+    return {
+        "level": level,
+        "track": track,
+        "location": {
+            "tier": location_tier,
+            "country": country,
+            "original": location,
+        },
+        "company_type": company_type,
+        "income": (min_total, max_total),
+        "compensation_breakdown": comp_breakdown,
+    }

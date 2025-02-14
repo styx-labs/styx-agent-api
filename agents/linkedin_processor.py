@@ -62,6 +62,8 @@ def get_linkedin_profile_with_companies(
         # Get and store company data for experiences
         get_experience_companies(profile)
 
+        profile.analyze_career()
+
         # Save profile to Firebase - company_data will be automatically excluded
         profile_dict = profile.dict()
         profile_ref = db.collection("candidates").document(public_id)

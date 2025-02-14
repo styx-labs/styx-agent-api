@@ -231,9 +231,9 @@ class LinkedInExperience(SerializableModel):
     ends_at: date | None
     location: str | None
     company_linkedin_profile_url: str | None
-    company_data: LinkedInCompany | None
-    summarized_job_description: AILinkedinJobDescription | None
-    experience_tags: list[str] | None
+    company_data: LinkedInCompany | None = None
+    summarized_job_description: AILinkedinJobDescription | None = None
+    experience_tags: list[str] | None = None
 
     @property
     def funding_stages_during_tenure(self) -> list[FundingStage] | None:
@@ -345,7 +345,7 @@ class LinkedInProfile(SerializableModel):
     public_identifier: str
     experiences: list[LinkedInExperience] = []
     education: list[LinkedInEducation] = []
-    career_metrics: CareerMetrics | None
+    career_metrics: CareerMetrics | None = None
 
     def analyze_career(self) -> None:
         """
