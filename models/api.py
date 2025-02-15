@@ -9,6 +9,12 @@ class EditKeyTraitsPayload(SerializableModel):
     key_traits: List[dict]
 
 
+class EditJobDescriptionPayload(SerializableModel):
+    """Payload for editing job description"""
+
+    job_description: str
+
+
 class HeadlessEvaluatePayload(Candidate):
     """Payload for headless evaluation"""
 

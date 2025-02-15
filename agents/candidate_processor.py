@@ -93,7 +93,11 @@ class CandidateProcessor:
                     ],
                     job_title=self.job_data["job_title"],
                     company_name=self.job_data["company_name"],
-                    created_at=self.job_data.get("created_at"),
+                    created_at=(
+                        self.job_data.get("created_at").isoformat()
+                        if isinstance(self.job_data.get("created_at"), datetime)
+                        else self.job_data.get("created_at")
+                    ),
                     pipeline_feedback=[
                         PipelineFeedback(**feedback)
                         for feedback in (self.job_data.get("pipeline_feedback") or [])

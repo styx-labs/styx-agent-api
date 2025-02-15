@@ -17,6 +17,7 @@ from models.api import (
     GetEmailPayload,
     CheckoutSessionRequest,
     EditKeyTraitsPayload,
+    EditJobDescriptionPayload,
     TestTemplateRequest,
     PipelineFeedbackPayload,
     CandidateCalibrationPayload,
@@ -101,8 +102,7 @@ async def validate_user_id(authorization: str = Header(None)):
 @app.post("/jobs")
 def create_job(job: Job, user_id: str = Depends(validate_user_id)):
     try:
-        job_data = job.dict()
-        job_id = firestore.create_job(job_data, user_id)
+        job_id = firestore.create_job(job.model_dump(), user_id)
         return {"job_id": job_id}
     except Exception as e:
         raise HTTPException(
@@ -318,6 +318,29 @@ def edit_key_traits(
             detail=f"Job with id {job_id} not found",
         )
 
+    processor = CandidateProcessor(job_id, job_data, user_id)
+    background_tasks.add_task(processor.reevaluate_candidates)
+
+    return {"message": "Candidate processing started"}
+
+
+@app.patch("/jobs/{job_id}/edit-job-description")
+def edit_job_description(
+    job_id: str,
+    payload: EditJobDescriptionPayload,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(validate_user_id),
+):
+    try:
+        firestore.edit_job_description(job_id, user_id, payload.model_dump())
+        job_data = firestore.get_job(job_id, user_id)
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating job description: {str(e)}",
+        )
+    
     processor = CandidateProcessor(job_id, job_data, user_id)
     background_tasks.add_task(processor.reevaluate_candidates)
 
@@ -689,32 +712,26 @@ async def apply_pipeline_feedback(
     user_id: str = Depends(validate_user_id),
 ):
     """Apply pipeline-level feedback and recalibrate all candidates"""
-    try:
-        job_data = firestore.get_job(job_id, user_id)
-        if not job_data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Job with id {job_id} not found",
-            )
-
-        processor = CandidateProcessor(job_id, job_data, user_id)
-        settings = {}
-        if payload.confidence_threshold is not None:
-            settings["confidence_threshold"] = payload.confidence_threshold
-        if payload.number_of_queries is not None:
-            settings["number_of_queries"] = payload.number_of_queries
-
-        background_tasks.add_task(
-            processor.apply_pipeline_feedback,
-            payload.feedback,
-            settings if settings else None,
-        )
-        return {"message": "Pipeline feedback processing started"}
-    except Exception as e:
+    job_data = firestore.get_job(job_id, user_id)
+    if not job_data:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error applying pipeline feedback: {str(e)}",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job with id {job_id} not found",
         )
+
+    processor = CandidateProcessor(job_id, job_data, user_id)
+    settings = {}
+    if payload.confidence_threshold is not None:
+        settings["confidence_threshold"] = payload.confidence_threshold
+    if payload.number_of_queries is not None:
+        settings["number_of_queries"] = payload.number_of_queries
+
+    background_tasks.add_task(
+        processor.apply_pipeline_feedback,
+        payload.feedback,
+        settings if settings else None,
+    )
+    return {"message": "Pipeline feedback processing started"}
 
 
 @app.patch("/jobs/{job_id}/calibrated-profiles")
