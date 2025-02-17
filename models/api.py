@@ -1,6 +1,7 @@
-from typing import List, Dict
+from typing import List, Dict, Optional
 from .serializable import SerializableModel
 from .jobs import Candidate, CalibratedProfiles
+from .linkedin import LinkedInProfile
 
 
 class EditKeyTraitsPayload(SerializableModel):
@@ -48,6 +49,23 @@ class HeadlessReachoutPayload(SerializableModel):
     citations: List[dict]
 
 
+class Calibration(SerializableModel):
+    """Calibration model"""
+
+    url: Optional[str] = None
+    candidate: Optional[LinkedInProfile] = None
+    calibration_result: str
+
+
+class HeadlessEvaluationPayload(SerializableModel):
+    """Payload for headless evaluation"""
+
+    url: Optional[str] = None
+    candidate: Optional[LinkedInProfile] = None
+    job_description: str
+    calibrations: Optional[List[Calibration]] = []
+
+
 class ParaformEvaluateGraphPayload(SerializableModel):
     """Payload for Paraform graph evaluation"""
 
@@ -87,12 +105,6 @@ class TestTemplateRequest(SerializableModel):
 
     format: str
     template_content: str
-
-
-class PipelineFeedbackPayload(SerializableModel):
-    """Payload for pipeline-level feedback"""
-
-    feedback: str
 
 
 class CandidateCalibrationPayload(SerializableModel):

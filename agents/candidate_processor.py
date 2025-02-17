@@ -3,7 +3,7 @@ import asyncio
 from fastapi import HTTPException, status
 from agents.linkedin_processor import get_linkedin_profile_with_companies
 import services.firestore as firestore
-from models.jobs import KeyTrait, Candidate, CalibratedProfiles, PipelineFeedback
+from models.jobs import KeyTrait, Candidate, CalibratedProfiles
 import psutil
 import logging
 from datetime import datetime, UTC
@@ -15,6 +15,7 @@ from fastapi.concurrency import run_in_threadpool
 from models.api import CandidateCalibrationPayload
 from models.jobs import Job
 from models.linkedin import LinkedInProfile
+import re
 
 
 class CandidateProcessor:
@@ -40,6 +41,51 @@ class CandidateProcessor:
             f"RSS: {memory_info.rss / 1024 / 1024:.2f}MB | "
             f"VMS: {memory_info.vms / 1024 / 1024:.2f}MB"
         )
+
+    @staticmethod
+    def _extract_linkedin_id(url: str) -> Optional[str]:
+        """Extract the LinkedIn public identifier from a profile URL."""
+        try:
+            # Remove any query parameters
+            url = url.split("?")[0]
+            # Remove trailing slash if present
+            url = url.rstrip("/")
+            # Get the last part of the URL which should be the ID
+            match = re.search(r"linkedin\.com/in/([^/]+)", url)
+            return match.group(1) if match else None
+        except Exception:
+            return None
+        
+    async def evaluate_single_candidate(self, candidate_data: Dict) -> dict:
+        """Evaluate a single candidate without creating a candidate record and returning the result"""
+        try:
+            key_traits = [KeyTrait(**trait) for trait in self.job_data["key_traits"]]
+            return await run_graph(
+                job_description=self.job_data["job_description"],
+                candidate_context=candidate_data["context"],
+                candidate_full_name=candidate_data["name"],
+                profile=candidate_data["profile"],
+                key_traits=key_traits,
+                ideal_profiles=self.job_data["ideal_profiles"],
+                number_of_queries=candidate_data.get("number_of_queries", 0),
+                confidence_threshold=candidate_data.get("confidence_threshold", 0.0),
+                search_mode=candidate_data.get("search_mode", True),
+                cached=candidate_data.get("cached", False),
+                citations=candidate_data.get("citations"),
+                source_str=candidate_data.get("source_str"),
+                custom_instructions=get_custom_instructions(
+                    self.user_id
+                ).evaluation_instructions
+                if get_custom_instructions(self.user_id)
+                else "",
+            )
+        except Exception as e:
+            print(e)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error running candidate evaluation: {str(e)}",
+            )
+
 
     async def process_single_candidate(self, candidate_data: Dict) -> None:
         """Process a single candidate with evaluation"""
@@ -97,11 +143,7 @@ class CandidateProcessor:
                         self.job_data.get("created_at").isoformat()
                         if isinstance(self.job_data.get("created_at"), datetime)
                         else self.job_data.get("created_at")
-                    ),
-                    pipeline_feedback=[
-                        PipelineFeedback(**feedback)
-                        for feedback in (self.job_data.get("pipeline_feedback") or [])
-                    ],
+                    )
                 ),
             )
 
@@ -171,10 +213,11 @@ class CandidateProcessor:
                 detail=f"Error running candidate evaluation: {str(e)}",
             )
 
-    def get_candidate_record(self, candidate_data: Dict) -> Optional[Dict]:
+    @staticmethod
+    def get_candidate_record(candidate_data: Dict) -> Optional[Dict]:
         """Get candidate record from LinkedIn URL with enriched company data."""
         try:
-            public_id = extract_linkedin_id(candidate_data["url"])
+            public_id = CandidateProcessor._extract_linkedin_id(candidate_data["url"])
             if not public_id:
                 print(
                     f"Could not extract public identifier from {candidate_data['url']}"
@@ -292,37 +335,6 @@ class CandidateProcessor:
             },
         )
         return id
-
-    async def apply_pipeline_feedback(
-        self, feedback: str, settings: Optional[Dict] = None
-    ) -> None:
-        """Apply pipeline-level feedback and recalibrate all candidates"""
-        try:
-            logging.info("Applying pipeline feedback and recalibrating candidates")
-
-            # Update job data with feedback
-            if "pipeline_feedback" not in self.job_data:
-                self.job_data["pipeline_feedback"] = []
-
-            self.job_data["pipeline_feedback"].append(
-                {"feedback": feedback, "timestamp": datetime.now(UTC).isoformat()}
-            )
-
-            if settings:
-                self.job_data.update(settings)
-
-            # Update job in Firestore
-            firestore.edit_job(self.job_id, self.user_id, self.job_data)
-
-            # Recalibrate all candidates
-            await self.reevaluate_candidates()
-
-        except Exception as e:
-            logging.error(f"Error applying pipeline feedback: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error applying pipeline feedback: {str(e)}",
-            )
 
     async def calibrate_candidate(
         self,

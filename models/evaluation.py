@@ -41,6 +41,23 @@ class SearchInputState(SerializableModel):
     custom_instructions: Optional[str] = None
 
 
+class HeadlessEvaluationOutput(SerializableModel):
+    """Output from headless evaluation"""
+
+    value: int
+    evaluation: str
+
+
+class EvaluationInputState(SerializableModel):
+    """Input state for evaluation"""
+
+    profile: LinkedInProfile
+    job: Job
+    number_of_queries: int
+    confidence_threshold: float
+    custom_instructions: Optional[str] = None
+
+
 class EvaluationInputState(SerializableModel):
     """Input state for cached evaluation"""
 

@@ -21,11 +21,11 @@ from models.api import (
     EditKeyTraitsLLMPayload,
     EditJobDescriptionLLMPayload,
     TestTemplateRequest,
-    PipelineFeedbackPayload,
     CandidateCalibrationPayload,
     BulkCalibrationPayload,
     UpdateCalibratedProfilesPayload,
     BulkCandidatePayload,
+    HeadlessEvaluationPayload,
 )
 from dotenv import load_dotenv
 from services.proxycurl import get_email, get_linkedin_profile
@@ -35,6 +35,7 @@ from agents.helper_functions import (
     get_calibrated_profiles_linkedin,
     edit_key_traits_llm_helper,
     edit_job_description_llm_helper,
+    headless_evaluate_helper,
 )
 from services.firebase_auth import verify_firebase_token
 from agents.candidate_processor import CandidateProcessor
@@ -50,6 +51,9 @@ from services.firestore import (
 )
 from models.templates import UserTemplates
 from models.instructions import CustomInstructions
+from pydantic import BaseModel
+from services.proxycurl import get_linkedin_profile
+
 
 load_dotenv()
 
@@ -169,7 +173,77 @@ def delete_job(job_id: str, user_id: str = Depends(validate_user_id)):
         )
 
 
+@app.post("/jobs/{job_id}/candidates/{candidate_id}/generate-reachout")
+async def generate_reachout(
+    job_id: str,
+    candidate_id: str,
+    payload: ReachoutPayload,
+    user_id: str = Depends(validate_user_id),
+):
+    try:
+        job = firestore.get_job(job_id, user_id)
+        if not job:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job with id {job_id} not found",
+            )
+        candidate = firestore.get_full_candidate(job_id, candidate_id, user_id)
+        if not candidate:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Candidate with id {candidate_id} not found",
+            )
+
+        reachout = get_reachout_message(
+            name=candidate["name"],
+            job_description=job["job_description"],
+            sections=candidate["sections"],
+            citations=candidate["citations"],
+            format=payload.format,
+            user_id=user_id,
+        )
+        return {"reachout": reachout}
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating reachout message: {str(e)}",
+        )
+    
+
+@app.post("/headless_evaluate")
+async def headless_evaluate(payload: HeadlessEvaluationPayload):
+    if payload.url:
+        _, candidate, _ = get_linkedin_profile(payload.url)
+    else:
+        candidate = payload.candidate
+
+    if not candidate:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Candidate with id {payload.url} not found",
+        )
+    calibrations = []
+    for calibration in payload.calibrations:
+        try:
+            if calibration.url:
+                _, calibration_candidate, _ = get_linkedin_profile(calibration.url)
+            else:
+                calibration_candidate = calibration.candidate
+            calibrations.append({
+                "candidate_name": calibration_candidate.full_name,
+                "candidate_context": calibration_candidate.to_context_string(),
+                "calibration_result": calibration.calibration_result
+            })
+        except Exception as e:
+            print(e)
+            continue
+    
+    return headless_evaluate_helper(candidate.full_name, candidate.to_context_string(), payload.job_description, calibrations)
+    
+
 # Candidate Management Endpoints
+
 @app.post("/jobs/{job_id}/candidates")
 async def create_candidate(
     job_id: str,
@@ -736,37 +810,6 @@ async def test_reachout_template(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error testing reachout template: {str(e)}",
         )
-
-
-# Pipeline Feedback and Calibration
-@app.post("/jobs/{job_id}/pipeline-feedback")
-async def apply_pipeline_feedback(
-    job_id: str,
-    payload: PipelineFeedbackPayload,
-    background_tasks: BackgroundTasks,
-    user_id: str = Depends(validate_user_id),
-):
-    """Apply pipeline-level feedback and recalibrate all candidates"""
-    job_data = firestore.get_job(job_id, user_id)
-    if not job_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Job with id {job_id} not found",
-        )
-
-    processor = CandidateProcessor(job_id, job_data, user_id)
-    settings = {}
-    if payload.confidence_threshold is not None:
-        settings["confidence_threshold"] = payload.confidence_threshold
-    if payload.number_of_queries is not None:
-        settings["number_of_queries"] = payload.number_of_queries
-
-    background_tasks.add_task(
-        processor.apply_pipeline_feedback,
-        payload.feedback,
-        settings if settings else None,
-    )
-    return {"message": "Pipeline feedback processing started"}
 
 
 @app.patch("/jobs/{job_id}/calibrated-profiles")
