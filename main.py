@@ -816,6 +816,7 @@ async def test_reachout_template(
 async def update_calibrated_profiles(
     job_id: str,
     payload: UpdateCalibratedProfilesPayload,
+    background_tasks: BackgroundTasks,
     user_id: str = Depends(validate_user_id),
 ):
     """Update calibrated profiles for a job"""
@@ -842,6 +843,8 @@ async def update_calibrated_profiles(
 
         # Update the job in Firestore
         firestore.edit_job(job_id, user_id, job_data)
+        processor = CandidateProcessor(job_id, job_data, user_id)
+        background_tasks.add_task(processor.reevaluate_candidates)
 
         return {
             "calibrated_profiles": job_data["calibrated_profiles"],
