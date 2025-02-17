@@ -18,6 +18,8 @@ from models.api import (
     CheckoutSessionRequest,
     EditKeyTraitsPayload,
     EditJobDescriptionPayload,
+    EditKeyTraitsLLMPayload,
+    EditJobDescriptionLLMPayload,
     TestTemplateRequest,
     PipelineFeedbackPayload,
     CandidateCalibrationPayload,
@@ -31,6 +33,8 @@ from agents.helper_functions import (
     get_key_traits,
     get_reachout_message,
     get_calibrated_profiles_linkedin,
+    edit_key_traits_llm_helper,
+    edit_job_description_llm_helper,
 )
 from services.firebase_auth import verify_firebase_token
 from agents.candidate_processor import CandidateProcessor
@@ -324,6 +328,22 @@ def edit_key_traits(
     return {"message": "Candidate processing started"}
 
 
+@app.post("/jobs/{job_id}/edit-key-traits-llm")
+def edit_key_traits_llm(
+    job_id: str,
+    payload: EditKeyTraitsLLMPayload,
+    user_id: str = Depends(validate_user_id),
+):
+    job_data = firestore.get_job(job_id, user_id)
+    if not job_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job with id {job_id} not found",
+        )
+
+    return edit_key_traits_llm_helper(job_data["key_traits"], payload.prompt)
+
+
 @app.patch("/jobs/{job_id}/edit-job-description")
 def edit_job_description(
     job_id: str,
@@ -345,6 +365,21 @@ def edit_job_description(
     background_tasks.add_task(processor.reevaluate_candidates)
 
     return {"message": "Candidate processing started"}
+
+
+@app.post("/jobs/{job_id}/edit-job-description-llm")
+def edit_job_description_llm(
+    job_id: str,
+    payload: EditJobDescriptionLLMPayload,
+    user_id: str = Depends(validate_user_id),
+):
+    job_data = firestore.get_job(job_id, user_id)
+    if not job_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job with id {job_id} not found",
+        )
+    return edit_job_description_llm_helper(job_data["job_description"], payload.prompt)
 
 
 @app.post("/jobs/{job_id}/candidates/{candidate_id}/recalibrate")

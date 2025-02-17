@@ -12,6 +12,18 @@ class KeyTraitsOutput(SerializableModel):
     company_name: str
 
 
+class EditKeyTraitsOutput(SerializableModel):
+    """Output from key traits editing"""
+
+    key_traits: list[KeyTrait]
+
+
+class EditJobDescriptionOutput(SerializableModel):
+    """Output from job description editing"""
+
+    job_description: str
+
+
 class TraitEvaluationOutput(SerializableModel):
     """Output from trait evaluation"""
 

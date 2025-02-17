@@ -9,10 +9,22 @@ class EditKeyTraitsPayload(SerializableModel):
     key_traits: List[dict]
 
 
+class EditKeyTraitsLLMPayload(SerializableModel):
+    """Payload for editing key traits with LLM"""
+
+    prompt: str
+
+
 class EditJobDescriptionPayload(SerializableModel):
     """Payload for editing job description"""
 
     job_description: str
+
+
+class EditJobDescriptionLLMPayload(SerializableModel):
+    """Payload for editing job description with LLM"""
+
+    prompt: str
 
 
 class HeadlessEvaluatePayload(Candidate):

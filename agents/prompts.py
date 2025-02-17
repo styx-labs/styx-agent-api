@@ -27,6 +27,33 @@ key_traits_prompt = """
     {calibrated_profiles}
 """
 
+edit_key_traits_prompt = """
+    You are an expert hiring manager at a company.
+    You are given a list of key traits for a job and a prompt from the user on how to edit the key traits.
+    Edit the key traits to meet the user's requirements.
+
+    Guidelines:
+    - Do not remove any traits. Only edit traits or add new ones as you see fit.
+
+    Here is the current list of key traits:
+    {key_traits}
+    
+    Here is how the user wants you to edit the key traits:
+    {prompt}
+"""
+
+edit_job_description_prompt = """
+    You are an expert hiring manager at a company.
+    You are given a job description and a prompt from the user on how to edit the job description.
+    Edit the job description to meet the user's requirements.
+
+    Here is the current job description:
+    {job_description}
+    
+    Here is how the user wants you to edit the job description:
+    {prompt}
+"""
+
 reachout_message_prompt_linkedin = """
     You are an expert recruiter writing highly personalized messages to reach out to candidates over LinkedIn.
     Your goal is to write a compelling and personalized message that will get the candidate's attention and interest them in the role.
