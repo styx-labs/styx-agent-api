@@ -575,3 +575,47 @@ def check_candidate_in_job(job_id: str, candidate_id: str, user_id: str) -> bool
     )
     doc = doc_ref.get()
     return doc.exists
+
+
+def update_user_subscription(user_id: str, subscription_id: str, status: str) -> None:
+    """Update a user's subscription status in Firestore
+
+    Args:
+        user_id: The ID of the user
+        subscription_id: The Stripe subscription ID
+        status: The subscription status ('active' or 'cancelled')
+    """
+    doc_ref = db.collection("users").document(user_id)
+    doc = doc_ref.get()
+    user_dict = doc.to_dict() if doc.exists else {}
+
+    user_dict["subscription"] = {
+        "id": subscription_id,
+        "status": status,
+        "updated_at": datetime.now(UTC).isoformat(),
+    }
+
+    doc_ref.set(user_dict)
+
+
+def get_free_tier_users() -> list[str]:
+    """Get all users on the free tier
+
+    Returns:
+        List of user IDs who are on the free tier (no subscription or free_tier status)
+    """
+    users_ref = db.collection("users")
+    
+    # Get users with free_tier status
+    free_tier_users = users_ref.where("subscription.status", "==", "free_tier").stream()
+    
+    # Get users with no subscription field
+    no_subscription_users = users_ref.where("subscription", "==", None).stream()
+    
+    user_ids = []
+    for user in free_tier_users:
+        user_ids.append(user.id)
+    for user in no_subscription_users:
+        user_ids.append(user.id)
+    
+    return user_ids
