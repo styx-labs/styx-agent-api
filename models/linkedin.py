@@ -84,7 +84,7 @@ class LinkedInCompany(SerializableModel):
     updates: list[CompanyUpdate] = []
     similar_companies: list[AffiliatedCompany] = []
     affiliated_companies: list[AffiliatedCompany] = []
-    funding_data: list[Funding] | None
+    funding_data: list[Funding] | None = None
 
     def _determine_funding_stage(self, funding) -> FundingStage:
         """Helper method to determine funding stage from a funding round."""

@@ -7,12 +7,8 @@ from collections import defaultdict
 from models.linkedin import LinkedInProfile, LinkedInExperience
 from models.career import CareerMetrics
 from .constants import unicorns, big_tech, quant
-from .career_levels import (
-    determine_career_level_llm,
-    determine_location_tier_llm,
-    determine_company_type_llm,
-)
-from .income_estimator import estimate_income_range
+from .career_levels import determine_career_level_llm
+
 
 # Constants for filtering experience titles
 EXCLUDED_TITLE_TERMS = {
@@ -64,7 +60,7 @@ def analyze_career(profile: LinkedInProfile) -> CareerMetrics:
     experience_tags = generate_experience_tags(professional_experiences)
 
     # Analyze the latest experience for level and income
-    latest_experience_data = analyze_latest_experience(profile)
+    latest_experience_data = analyze_latest_experience(profile, total_months)
 
     return CareerMetrics(
         total_experience_months=total_months,
@@ -74,8 +70,6 @@ def analyze_career(profile: LinkedInProfile) -> CareerMetrics:
         career_tags=career_tags,
         experience_tags=experience_tags,
         latest_experience_level=latest_experience_data["level"],
-        latest_experience_track=latest_experience_data["track"],
-        latest_experience_income=latest_experience_data["income"],
     )
 
 
@@ -302,46 +296,15 @@ def generate_experience_tags(pro_exps: list[LinkedInExperience]) -> list[str]:
     return list(tags)
 
 
-def analyze_latest_experience(profile: LinkedInProfile) -> dict:
+def analyze_latest_experience(profile: LinkedInProfile, total_months: int) -> dict:
     """Analyze the latest job experience to determine level and income."""
-    if not profile.experiences:
-        return {"level": None, "track": None, "income": None}
-
     latest_experience = profile.experiences[0]
     role = latest_experience.title
     company = latest_experience.company
-    location = latest_experience.location or f"{profile.city}, {profile.country}"
-
-    # Get company description if available
-    company_description = getattr(latest_experience, "company_description", "")
-
     # Determine career level and track using LLM
-    level, track = determine_career_level_llm(role, company)
-
-    # Determine location tier and country using LLM
-    location_tier, country = determine_location_tier_llm(location)
-
-    # Determine company type using LLM
-    company_type = determine_company_type_llm(company, company_description)
-
-    # Estimate income range with detailed breakdown
-    min_total, max_total, comp_breakdown = estimate_income_range(
-        level=level,
-        track=track,
-        location=location_tier,
-        country=country,
-        company_type=company_type,
-    )
+    level, track = determine_career_level_llm(role, company, total_months)
 
     return {
         "level": level,
         "track": track,
-        "location": {
-            "tier": location_tier,
-            "country": country,
-            "original": location,
-        },
-        "company_type": company_type,
-        "income": (min_total, max_total),
-        "compensation_breakdown": comp_breakdown,
     }
