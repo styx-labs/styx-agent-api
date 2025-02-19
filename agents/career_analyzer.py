@@ -259,7 +259,7 @@ def generate_experience_tags(pro_exps: list[LinkedInExperience]) -> list[str]:
     seen_companies = set()
 
     for exp in pro_exps:
-        if not exp.company:
+        if not exp.company or not exp.company_data:
             continue
         company = exp.company.strip()
         if company in seen_companies:
@@ -273,12 +273,12 @@ def generate_experience_tags(pro_exps: list[LinkedInExperience]) -> list[str]:
         if company in quant:
             tags.add("Worked at Quant Fund")
 
-        stages = getattr(exp, "funding_stages_during_tenure", None)
+        stages = exp.company_data.funding_data
         if stages:
-            stages_lower = {s.lower() for s in stages}
-            if stages_lower & {"pre-seed", "seed", "series a", "series b"}:
+            stages_lower = {s.funding_type.lower() for s in stages}
+            if {"pre seed", "seed", "series a", "series b"} in stages_lower:
                 tags.add("Startup Experience")
-            elif stages_lower & {
+            elif {
                 "series c",
                 "series d",
                 "series e",
@@ -288,9 +288,9 @@ def generate_experience_tags(pro_exps: list[LinkedInExperience]) -> list[str]:
                 "series i",
                 "series j",
                 "series k",
-            }:
+            } in stages_lower:
                 tags.add("Growth Company Experience")
-            elif stages_lower & {"ipo", "public"}:
+            elif {"ipo", "public"} in stages_lower:
                 tags.add("Public Company Experience")
 
     return list(tags)

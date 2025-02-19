@@ -15,72 +15,72 @@ from services.firestore import db
 class CompanyLocation(SerializableModel):
     """Model for company location data."""
 
-    city: str | None
-    country: str | None
-    is_hq: bool
-    line_1: str | None
-    postal_code: str | None
-    state: str | None
+    city: str | None = None
+    country: str | None = None
+    is_hq: bool = False
+    line_1: str | None = None
+    postal_code: str | None = None
+    state: str | None = None
 
 
 class AffiliatedCompany(SerializableModel):
     """Model for affiliated company data."""
 
-    industry: str | None
-    link: str
-    location: str | None
-    name: str
+    industry: str | None = None
+    link: str | None = None
+    location: str | None = None
+    name: str | None = None
 
 
 class CompanyUpdate(SerializableModel):
     """Model for company update data."""
 
-    article_link: str | None
-    image: str | None
-    posted_on: dict | None
-    text: str | None
-    total_likes: int | None
+    article_link: str | None = None
+    image: str | None = None
+    posted_on: dict | None = None
+    text: str | None = None
+    total_likes: int | None = None
 
 
 class Investor(SerializableModel):
     """Model for investor data."""
 
-    linkedin_profile_url: str | None
-    name: str
-    type: str | None
+    linkedin_profile_url: str | None = None
+    name: str | None = None
+    type: str | None = None
 
 
 class Funding(SerializableModel):
     """Model for funding round data."""
 
-    funding_type: str | None
-    money_raised: int | None
-    announced_date: dict | None
-    number_of_investors: int | None
+    funding_type: str | None = None
+    money_raised: int | None = None
+    announced_date: dict | None = None
+    number_of_investors: int | None = None
     investor_list: list[Investor] = []
 
 
 class LinkedInCompany(SerializableModel):
-    """Model for LinkedIn company profile data from Proxycurl API."""
+    """Model for LinkedIn company profile data."""
 
     company_name: str
-    description: str | None
-    website: str | None
-    industry: str | None
-    company_size: list[int | None] | None
-    company_size_on_linkedin: int | None
-    company_type: str | None
-    founded_year: int | None
+    description: str | None = None
+    website: str | None = None
+    industry: str | None = None
+    company_size: list[int | None] | None = None
+    company_size_on_linkedin: int | None = None
+    company_type: str | None = None
+    founded_year: int | None = None
     specialties: list[str] = []
     locations: list[CompanyLocation] = []
-    hq: CompanyLocation | None
-    follower_count: int | None
-    profile_pic_url: str | None
-    background_cover_image_url: str | None
-    tagline: str | None
-    universal_name_id: str | None
-    linkedin_internal_id: str | None
-    search_id: str | None
+    hq: CompanyLocation | None = None
+    follower_count: int | None = None
+    profile_pic_url: str | None = None
+    background_cover_image_url: str | None = None
+    tagline: str | None = None
+    universal_name_id: str | None = None
+    linkedin_internal_id: str | None = None
+    search_id: str | None = None
     updates: list[CompanyUpdate] = []
     similar_companies: list[AffiliatedCompany] = []
     affiliated_companies: list[AffiliatedCompany] = []
@@ -238,7 +238,11 @@ class LinkedInExperience(SerializableModel):
     @property
     def funding_stages_during_tenure(self) -> list[FundingStage] | None:
         """Calculate the funding stages of the company during this person's tenure."""
-        if not self.company_linkedin_profile_url:
+        if (
+            not self.company_linkedin_profile_url
+            or not self.company_data
+            or not self.starts_at
+        ):
             return []
 
         if not self.company_data and "school" not in self.company_linkedin_profile_url:
@@ -249,9 +253,6 @@ class LinkedInExperience(SerializableModel):
 
             if company_data:
                 self.company_data = LinkedInCompany(**company_data.to_dict())
-
-        if not self.starts_at or not self.company_data:
-            return []
 
         # Calculate cutoff date (2 years before start date)
         two_years_before = date(
@@ -277,7 +278,7 @@ class LinkedInExperience(SerializableModel):
     def dict(self, *args, **kwargs) -> dict:
         """Override dict to exclude company_data by default and include calculated fields."""
         exclude = kwargs.get("exclude", set())
-        if "company_data" not in exclude:
+        if self.company_data and "company_data" not in exclude:
             exclude.add("company_data")
         kwargs["exclude"] = exclude
 
@@ -295,13 +296,13 @@ class LinkedInExperience(SerializableModel):
 
 
 class LinkedInEducation(SerializableModel):
-    school: str | None
-    degree_name: str | None
-    field_of_study: str | None
-    starts_at: date | None
-    ends_at: date | None
-    school_linkedin_profile_url: str | None
-    logo_url: str | None
+    school: str | None = None
+    degree_name: str | None = None
+    field_of_study: str | None = None
+    starts_at: date | None = None
+    ends_at: date | None = None
+    school_linkedin_profile_url: str | None = None
+    logo_url: str | None = None
 
     @property
     def school_id(self) -> str | None:

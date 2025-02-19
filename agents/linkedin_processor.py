@@ -1,6 +1,6 @@
 import re
 from models.linkedin import LinkedInProfile, LinkedInCompany
-from services.proxycurl import get_linkedin_profile, get_company
+from services.crustdata import get_linkedin_profile, get_company
 from services.firestore import db
 import logging
 import services.firestore as firestore
@@ -11,7 +11,7 @@ def get_experience_companies(profile: LinkedInProfile) -> None:
     """
     Get and store company data for all experiences in a profile.
     If company exists in Firebase, use cached data.
-    If not, fetch from ProxyCurl and store in Firebase.
+    If not, fetch from Crustdata and store in Firebase.
     Attaches company data to each experience in the profile.
     """
     tasks = []
@@ -43,6 +43,8 @@ def get_experience_companies(profile: LinkedInProfile) -> None:
                         company_dict = company.dict()
                         company_ref.set(company_dict)
                         exp.company_data = company
+                    else:
+                        exp.company_data = None
 
 
 def get_linkedin_profile_with_companies(
