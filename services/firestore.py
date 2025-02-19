@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, UTC
 from typing import List, Dict, Optional
 from models.templates import UserTemplates
 from models.instructions import CustomInstructions
+import logging
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.llms import get_azure_openai
@@ -62,6 +63,14 @@ def edit_key_traits(job_id: str, user_id: str, key_traits: dict):
         db.collection("users").document(user_id).collection("jobs").document(job_id)
     )
     doc_ref.update(key_traits)
+
+
+def edit_job_description(job_id: str, user_id: str, job_description: dict):
+    """Edit the job description for a job"""
+    doc_ref = (
+        db.collection("users").document(user_id).collection("jobs").document(job_id)
+    )
+    doc_ref.update(job_description)
 
 
 def create_job(job_data: dict, user_id: str) -> str:
@@ -548,3 +557,28 @@ def bulk_favorite_candidates(
         batch.commit()
 
     return True
+
+
+def edit_job(job_id: str, user_id: str, job_data: dict) -> bool:
+    """Edit a job's data"""
+    try:
+        doc_ref = (
+            db.collection("users").document(user_id).collection("jobs").document(job_id)
+        )
+        doc_ref.update(job_data)
+        return True
+    except Exception as e:
+        logging.error(f"Error editing job: {str(e)}")
+        return False
+
+
+def check_candidate_in_job(job_id: str, candidate_id: str, user_id: str) -> bool:
+    """Check if a candidate already exists in a job"""
+    doc_ref = (
+        db.collection("users").document(user_id).collection("jobs").document(job_id)
+    )
+    doc = doc_ref.get()
+    if not doc.exists:
+        return False
+    job_data = doc.to_dict()
+    return candidate_id in job_data.get("candidates", {})

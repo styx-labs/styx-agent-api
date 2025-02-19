@@ -1,14 +1,31 @@
-from typing import List, Optional
-from datetime import datetime
-from pydantic import Field
-from .base import SerializableModel, Candidate
-from models.linkedin import LinkedInProfile
+from typing import List, Dict, Optional
+from .serializable import SerializableModel
+from .jobs import Candidate, CalibratedProfiles
+from .linkedin import LinkedInProfile
 
 
 class EditKeyTraitsPayload(SerializableModel):
     """Payload for editing key traits"""
 
     key_traits: List[dict]
+
+
+class EditKeyTraitsLLMPayload(SerializableModel):
+    """Payload for editing key traits with LLM"""
+
+    prompt: str
+
+
+class EditJobDescriptionPayload(SerializableModel):
+    """Payload for editing job description"""
+
+    job_description: str
+
+
+class EditJobDescriptionLLMPayload(SerializableModel):
+    """Payload for editing job description with LLM"""
+
+    prompt: str
 
 
 class HeadlessEvaluatePayload(Candidate):
@@ -88,3 +105,28 @@ class TestTemplateRequest(SerializableModel):
 
     format: str
     template_content: str
+
+
+class CandidateCalibrationPayload(SerializableModel):
+    """Payload for individual candidate calibration"""
+
+    fit: str  # "good" or "bad"
+    reasoning: str
+
+
+class BulkCalibrationPayload(SerializableModel):
+    """Payload for bulk candidate calibration"""
+
+    feedback: Dict[str, CandidateCalibrationPayload]  # Dict of candidate_id to feedback
+
+
+class UpdateCalibratedProfilesPayload(SerializableModel):
+    """Payload for updating calibrated profiles"""
+
+    calibrated_profiles: List[CalibratedProfiles]
+
+
+class BulkCandidatePayload(SerializableModel):
+    """Payload for bulk candidate processing"""
+
+    candidate_ids: List[str]

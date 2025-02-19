@@ -3,6 +3,8 @@ from models.linkedin import LinkedInProfile, LinkedInCompany
 from services.proxycurl import get_linkedin_profile, get_company
 from services.firestore import db
 import logging
+import services.firestore as firestore
+from utils.linkedin_utils import extract_linkedin_id
 
 
 def get_experience_companies(profile: LinkedInProfile) -> None:
@@ -47,11 +49,15 @@ def get_linkedin_profile_with_companies(
     url: str,
 ) -> tuple[str, LinkedInProfile, str]:
     try:
-        # First get the basic profile
-        full_name, profile, public_id = get_linkedin_profile(url)
-
-        if not full_name or not profile or not public_id:
-            raise ValueError("Missing required profile data from LinkedIn API")
+        public_id = extract_linkedin_id(url)
+        # Check if the candidate is already in Firebase
+        if firestore.check_cached_candidate_exists(public_id):
+            cached_candidate = firestore.get_cached_candidate(public_id)
+            full_name = cached_candidate["name"]
+            profile = LinkedInProfile(**cached_candidate["profile"])
+        else:
+            # First get the basic profile
+            full_name, profile, public_id = get_linkedin_profile(url)
 
         # Get and store company data for experiences
         get_experience_companies(profile)

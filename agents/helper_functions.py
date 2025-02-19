@@ -6,11 +6,14 @@ from agents.prompts import (
     reachout_message_prompt_linkedin,
     reachout_message_prompt_email,
     headless_evaluate_prompt,
+    edit_key_traits_prompt,
+    edit_job_description_prompt,
 )
+
 from agents.linkedin_processor import get_linkedin_profile_with_companies
 from services.firestore import get_user_templates
-from models.evaluation import KeyTraitsOutput, HeadlessEvaluationOutput
-from models.linkedin import LinkedInProfile
+from models.evaluation import KeyTraitsOutput, HeadlessEvaluationOutput, EditKeyTraitsOutput, EditJobDescriptionOutput
+from models.jobs import CalibratedProfiles
 
 
 @traceable(name="headless_evaluate_helper")
@@ -74,40 +77,77 @@ def headless_evaluate_helper(
     return output
 
 
-@traceable(name="get_list_of_profiles")
-def get_list_of_profiles(ideal_profile_urls: list[str]) -> list[str]:
-    if ideal_profile_urls:
-        ideal_profiles = []
-        for url in ideal_profile_urls:
-            _, profile, _ = get_linkedin_profile_with_companies(url)
-            ideal_profiles.append(profile.to_context_string())
-        return ideal_profiles
-    return []
+@traceable(name="get_calibrated_profiles_linkedin")
+def get_calibrated_profiles_linkedin(
+    calibrated_profiles: list[CalibratedProfiles],
+) -> list[CalibratedProfiles]:
+    if calibrated_profiles:
+        for calibrated_profile in calibrated_profiles:
+            _, profile, _ = get_linkedin_profile_with_companies(calibrated_profile.url)
+            calibrated_profile.profile = profile
+    return calibrated_profiles
 
 
 @traceable(name="get_key_traits")
 def get_key_traits(
-    job_description: str, ideal_profiles: list[str]
+    job_description: str, calibrated_profiles: list[CalibratedProfiles]
 ) -> tuple[KeyTraitsOutput, list[str]]:
-    if ideal_profiles:
-        ideal_profiles_str = ""
-        for profile in ideal_profiles:
-            ideal_profiles_str += profile
-            ideal_profiles_str += "\n---------\n---------\n"
+    if calibrated_profiles:
+        calibrate_profiles_str = ""
+        for calibrated_profile in calibrated_profiles:
+            calibrate_profiles_str += str(calibrated_profile)
+            calibrate_profiles_str += "\n---------\n---------\n"
     else:
-        ideal_profiles_str = ""
+        calibrate_profiles_str = ""
 
     structured_llm = llm.with_structured_output(KeyTraitsOutput)
     output = structured_llm.invoke(
         [
             SystemMessage(
                 content=key_traits_prompt.format(
-                    job_description=job_description, ideal_profiles=ideal_profiles_str
+                    job_description=job_description,
+                    calibrated_profiles=calibrate_profiles_str,
                 )
             ),
             HumanMessage(
                 content="Generate a list of key traits relevant to the job description."
             ),
+        ]
+    )
+    return output
+
+
+@traceable(name="edit_key_traits_llm")
+def edit_key_traits_llm_helper(key_traits: dict, prompt: str) -> EditKeyTraitsOutput:
+    key_traits_str = "\n".join(
+        [
+            f"trait: {trait['trait']}\ndescription: {trait['description']}\nrequired: {trait['required']}"
+            for trait in key_traits
+        ]
+    )
+    structured_llm = llm.with_structured_output(EditKeyTraitsOutput)
+    output = structured_llm.invoke(
+        [
+            SystemMessage(
+                content=edit_key_traits_prompt.format(
+                    key_traits=key_traits_str, prompt=prompt
+                )
+            ),
+            HumanMessage(content="Edit the key traits to meet the user's requirements."),
+        ]
+    )
+    return output
+
+
+@traceable(name="edit_job_description_llm")
+def edit_job_description_llm_helper(
+    job_description: str, prompt: str
+) -> EditJobDescriptionOutput:
+    structured_llm = llm.with_structured_output(EditJobDescriptionOutput)
+    output = structured_llm.invoke(
+        [
+            SystemMessage(content=edit_job_description_prompt.format(job_description=job_description, prompt=prompt)),
+            HumanMessage(content="Edit the job description to meet the user's requirements."),
         ]
     )
     return output

@@ -42,7 +42,7 @@ key_traits_prompt = """
 
     For each requirement, provide:
     - A short, specific trait name (not a full sentence)
-    - A detailed description of the trait that will tell a sourcer what to look for in a candidate. This should be detailed - assume that the sourcer has no experience with the job and the company.
+    - A detailed description of the trait that will tell a sourcer what to look for in a candidate. This should have step by step instructions on how to decide if the trait is present - assume that the sourcer has no experience with the job and the company.
     - Whether the trait is required or a "nice to have"
 
     Guidelines:
@@ -54,8 +54,36 @@ key_traits_prompt = """
 
     Here is the job description:
     {job_description}
-    Here is the list of ideal profiles for the job:
-    {ideal_profiles}
+    
+    Here is a list of calibrated candidates for this job. Use this information to extract nuances and patterns between those that are good fits and those that are not:
+    {calibrated_profiles}
+"""
+
+edit_key_traits_prompt = """
+    You are an expert hiring manager at a company.
+    You are given a list of key traits for a job and a prompt from the user on how to edit the key traits.
+    Edit the key traits to meet the user's requirements.
+
+    Guidelines:
+    - Do not remove any traits. Only edit traits or add new ones as you see fit.
+
+    Here is the current list of key traits:
+    {key_traits}
+    
+    Here is how the user wants you to edit the key traits:
+    {prompt}
+"""
+
+edit_job_description_prompt = """
+    You are an expert hiring manager at a company.
+    You are given a job description and a prompt from the user on how to edit the job description.
+    Edit the job description to meet the user's requirements.
+
+    Here is the current job description:
+    {job_description}
+    
+    Here is how the user wants you to edit the job description:
+    {prompt}
 """
 
 reachout_message_prompt_linkedin = """

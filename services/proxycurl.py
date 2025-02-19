@@ -30,6 +30,8 @@ def get_linkedin_profile(url: str) -> tuple[str, LinkedInProfile, str]:
     api_endpoint = "https://nubela.co/proxycurl/api/v2/linkedin"
     params = {"linkedin_profile_url": url}
     response = requests.get(api_endpoint, params=params, headers=headers)
+    if response.status_code != 200:
+        raise ValueError("Missing required profile data from LinkedIn API")
 
     data = response.json()
 
@@ -45,16 +47,12 @@ def get_linkedin_profile(url: str) -> tuple[str, LinkedInProfile, str]:
         experiences=[
             LinkedInExperience(
                 title=exp.get("title"),
-                company=exp.get("company")
-                if "company" in exp
-                else "No Company",
+                company=exp.get("company") if "company" in exp else "No Company",
                 description=exp.get("description"),
                 starts_at=convert_date_dict(exp.get("starts_at")),
                 ends_at=convert_date_dict(exp.get("ends_at")),
                 location=exp.get("location"),
-                company_linkedin_profile_url=exp.get(
-                    "company_linkedin_profile_url"
-                ),
+                company_linkedin_profile_url=exp.get("company_linkedin_profile_url"),
             )
             for exp in data.get("experiences", [])
             if "title" in exp and "company" in exp
@@ -66,15 +64,11 @@ def get_linkedin_profile(url: str) -> tuple[str, LinkedInProfile, str]:
                 field_of_study=edu.get("field_of_study"),
                 starts_at=convert_date_dict(edu.get("starts_at")),
                 ends_at=convert_date_dict(edu.get("ends_at")),
-                school_linkedin_profile_url=edu.get(
-                    "school_linkedin_profile_url"
-                ),
+                school_linkedin_profile_url=edu.get("school_linkedin_profile_url"),
                 logo_url=edu.get("logo_url"),
             )
             for edu in data.get("education", [])
-            if all(
-                k in edu for k in ["school", "degree_name", "field_of_study"]
-            )
+            if all(k in edu for k in ["school", "degree_name", "field_of_study"])
         ],
     )
 
