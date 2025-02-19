@@ -1,6 +1,8 @@
 import re
 from models.linkedin import LinkedInProfile, LinkedInCompany
-from services.crustdata import get_linkedin_profile, get_company
+
+# from services.crustdata import get_linkedin_profile, get_company
+from services.proxycurl import get_linkedin_profile, get_company
 from services.firestore import db
 import logging
 import services.firestore as firestore
