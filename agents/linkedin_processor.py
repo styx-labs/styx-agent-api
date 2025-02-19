@@ -37,16 +37,17 @@ def get_experience_companies(profile: LinkedInProfile) -> None:
                     company_data = company_doc.to_dict()
                     exp.company_data = LinkedInCompany(**company_data)
                 else:
-                    # Add to list of companies to fetch
-                    tasks.append((exp, company_id, company_ref))
+                    # # Add to list of companies to fetch
+                    # tasks.append((exp, company_id, company_ref))
 
-                    company = get_company(exp.company_linkedin_profile_url)
-                    if company:
-                        company_dict = company.dict()
-                        company_ref.set(company_dict)
-                        exp.company_data = company
-                    else:
-                        exp.company_data = None
+                    # company = get_company(exp.company_linkedin_profile_url)
+                    # if company:
+                    #     company_dict = company.dict()
+                    #     company_ref.set(company_dict)
+                    #     exp.company_data = company
+                    # else:
+                    #     exp.company_data = None
+                    exp.company_data = None
 
 
 def get_linkedin_profile_with_companies(
