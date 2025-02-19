@@ -3,88 +3,88 @@ LinkedIn data models with standardized serialization.
 """
 
 import re
-from typing import List, Optional
 from datetime import date
 from .serializable import SerializableModel
 from .career import (
     CareerMetrics,
     FundingStage,
 )
+from services.firestore import db
 
 
 class CompanyLocation(SerializableModel):
     """Model for company location data."""
 
-    city: Optional[str] = None
-    country: Optional[str] = None
-    is_hq: Optional[bool] = False
-    line_1: Optional[str] = None
-    postal_code: Optional[str] = None
-    state: Optional[str] = None
+    city: str | None = None
+    country: str | None = None
+    is_hq: bool = False
+    line_1: str | None = None
+    postal_code: str | None = None
+    state: str | None = None
 
 
 class AffiliatedCompany(SerializableModel):
     """Model for affiliated company data."""
 
-    industry: Optional[str] = None
-    link: str
-    location: Optional[str] = None
-    name: str
+    industry: str | None = None
+    link: str | None = None
+    location: str | None = None
+    name: str | None = None
 
 
 class CompanyUpdate(SerializableModel):
     """Model for company update data."""
 
-    article_link: Optional[str] = None
-    image: Optional[str] = None
-    posted_on: Optional[dict] = None
-    text: Optional[str] = None
-    total_likes: Optional[int] = None
+    article_link: str | None = None
+    image: str | None = None
+    posted_on: dict | None = None
+    text: str | None = None
+    total_likes: int | None = None
 
 
 class Investor(SerializableModel):
     """Model for investor data."""
 
-    linkedin_profile_url: Optional[str] = None
-    name: str
-    type: Optional[str] = None
+    linkedin_profile_url: str | None = None
+    name: str | None = None
+    type: str | None = None
 
 
 class Funding(SerializableModel):
     """Model for funding round data."""
 
-    funding_type: Optional[str] = None
-    money_raised: Optional[int] = None
-    announced_date: Optional[dict] = None
-    number_of_investors: Optional[int] = None
-    investor_list: List[Investor] = []
+    funding_type: str | None = None
+    money_raised: int | None = None
+    announced_date: dict | None = None
+    number_of_investors: int | None = None
+    investor_list: list[Investor] = []
 
 
 class LinkedInCompany(SerializableModel):
-    """Model for LinkedIn company profile data from Proxycurl API."""
+    """Model for LinkedIn company profile data."""
 
     company_name: str
-    description: Optional[str] = None
-    website: Optional[str] = None
-    industry: Optional[str] = None
-    company_size: Optional[List[Optional[int]]] = None
-    company_size_on_linkedin: Optional[int] = None
-    company_type: Optional[str] = None
-    founded_year: Optional[int] = None
-    specialties: Optional[List[str]] = []
-    locations: List[CompanyLocation] = []
-    hq: Optional[CompanyLocation] = None
-    follower_count: Optional[int] = None
-    profile_pic_url: Optional[str] = None
-    background_cover_image_url: Optional[str] = None
-    tagline: Optional[str] = None
-    universal_name_id: Optional[str] = None
-    linkedin_internal_id: Optional[str] = None
-    search_id: Optional[str] = None
-    updates: List[CompanyUpdate] = []
-    similar_companies: List[AffiliatedCompany] = []
-    affiliated_companies: List[AffiliatedCompany] = []
-    funding_data: Optional[List[Funding]] = None
+    description: str | None = None
+    website: str | None = None
+    industry: str | None = None
+    company_size: list[int | None] | None = None
+    company_size_on_linkedin: int | None = None
+    company_type: str | None = None
+    founded_year: int | None = None
+    specialties: list[str] = []
+    locations: list[CompanyLocation] = []
+    hq: CompanyLocation | None = None
+    follower_count: int | None = None
+    profile_pic_url: str | None = None
+    background_cover_image_url: str | None = None
+    tagline: str | None = None
+    universal_name_id: str | None = None
+    linkedin_internal_id: str | None = None
+    search_id: str | None = None
+    updates: list[CompanyUpdate] = []
+    similar_companies: list[AffiliatedCompany] = []
+    affiliated_companies: list[AffiliatedCompany] = []
+    funding_data: list[Funding] | None = None
 
     def _determine_funding_stage(self, funding) -> FundingStage:
         """Helper method to determine funding stage from a funding round."""
@@ -158,7 +158,7 @@ class LinkedInCompany(SerializableModel):
 
     def get_funding_stages_between_dates(
         self, start_date: date, end_date: date = None, cutoff_date: date = None
-    ) -> List[FundingStage]:
+    ) -> list[FundingStage]:
         """Get the sequence of funding stages between two dates.
 
         Args:
@@ -167,7 +167,7 @@ class LinkedInCompany(SerializableModel):
             cutoff_date: Optional date before which to ignore funding rounds
         """
         if not self.funding_data:
-            return [FundingStage.UNKNOWN]
+            return []
 
         end_date = end_date or date.today()
         relevant_rounds = []
@@ -213,33 +213,46 @@ class LinkedInCompany(SerializableModel):
             except (KeyError, ValueError, TypeError):
                 continue
 
-        return [current_stage] + relevant_rounds if relevant_rounds else [current_stage]
+        return list(dict.fromkeys([current_stage] + relevant_rounds))
 
 
 class AILinkedinJobDescription(SerializableModel):
     role_summary: str
-    skills: List[str]
-    requirements: List[str]
-    sources: List[str]
+    skills: list[str]
+    requirements: list[str]
+    sources: list[str]
 
 
 class LinkedInExperience(SerializableModel):
-    title: Optional[str] = None
-    company: Optional[str] = None
-    description: Optional[str] = None
-    starts_at: Optional[date] = None
-    ends_at: Optional[date] = None
-    location: Optional[str] = None
-    company_linkedin_profile_url: Optional[str] = None
-    company_data: Optional[LinkedInCompany] = None
-    summarized_job_description: Optional[AILinkedinJobDescription] = None
-    experience_tags: Optional[List[str]] = None
+    title: str | None
+    company: str | None
+    description: str | None
+    starts_at: date | None
+    ends_at: date | None
+    location: str | None
+    company_linkedin_profile_url: str | None
+    company_data: LinkedInCompany | None = None
+    summarized_job_description: AILinkedinJobDescription | None = None
+    experience_tags: list[str] | None = None
 
     @property
-    def funding_stages_during_tenure(self) -> List[FundingStage]:
+    def funding_stages_during_tenure(self) -> list[FundingStage] | None:
         """Calculate the funding stages of the company during this person's tenure."""
-        if not self.company_data or not self.starts_at:
-            return [FundingStage.UNKNOWN]
+        if (
+            not self.company_linkedin_profile_url
+            or not self.company_data
+            or not self.starts_at
+        ):
+            return []
+
+        if not self.company_data and "school" not in self.company_linkedin_profile_url:
+            company_id = re.search(
+                r"linkedin\.com/company/([^/?]+)", self.company_linkedin_profile_url
+            ).group(1)
+            company_data = db.collection("companies").document(company_id).get()
+
+            if company_data:
+                self.company_data = LinkedInCompany(**company_data.to_dict())
 
         # Calculate cutoff date (2 years before start date)
         two_years_before = date(
@@ -251,7 +264,7 @@ class LinkedInExperience(SerializableModel):
         )
 
     @property
-    def duration_months(self) -> Optional[int]:
+    def duration_months(self) -> int | None:
         """Calculate the duration of this experience in months."""
         if not self.starts_at:
             return None
@@ -265,7 +278,7 @@ class LinkedInExperience(SerializableModel):
     def dict(self, *args, **kwargs) -> dict:
         """Override dict to exclude company_data by default and include calculated fields."""
         exclude = kwargs.get("exclude", set())
-        if "company_data" not in exclude:
+        if self.company_data and "company_data" not in exclude:
             exclude.add("company_data")
         kwargs["exclude"] = exclude
 
@@ -274,24 +287,25 @@ class LinkedInExperience(SerializableModel):
 
         # Add calculated fields
         d["duration_months"] = self.duration_months
-        d["funding_stages_during_tenure"] = [
-            stage.value for stage in self.funding_stages_during_tenure
-        ]
+        if self.funding_stages_during_tenure:
+            d["funding_stages_during_tenure"] = [
+                stage.value for stage in self.funding_stages_during_tenure
+            ]
 
         return d
 
 
 class LinkedInEducation(SerializableModel):
-    school: Optional[str] = None
-    degree_name: Optional[str] = None
-    field_of_study: Optional[str] = None
-    starts_at: Optional[date] = None
-    ends_at: Optional[date] = None
-    school_linkedin_profile_url: Optional[str] = None
-    logo_url: Optional[str] = None
+    school: str | None = None
+    degree_name: str | None = None
+    field_of_study: str | None = None
+    starts_at: date | None = None
+    ends_at: date | None = None
+    school_linkedin_profile_url: str | None = None
+    logo_url: str | None = None
 
     @property
-    def school_id(self) -> Optional[str]:
+    def school_id(self) -> str | None:
         """Get the LinkedIn school ID."""
         from agents.constants import extract_school_id
 
@@ -306,7 +320,7 @@ class LinkedInEducation(SerializableModel):
         return extract_school_id(self.school_linkedin_profile_url)
 
     @property
-    def university_tier(self) -> Optional[str]:
+    def university_tier(self) -> str | None:
         """Get the ranking tier of the university."""
         from agents.constants import get_university_tier_by_id
 
@@ -324,15 +338,15 @@ class LinkedInEducation(SerializableModel):
 
 class LinkedInProfile(SerializableModel):
     full_name: str
-    occupation: Optional[str] = None
-    headline: Optional[str] = None
-    summary: Optional[str] = None
-    city: Optional[str] = None
-    country: Optional[str] = None
+    occupation: str | None
+    headline: str | None
+    summary: str | None
+    city: str | None
+    country: str | None
     public_identifier: str
-    experiences: List[LinkedInExperience] = []
-    education: List[LinkedInEducation] = []
-    career_metrics: Optional[CareerMetrics] = None
+    experiences: list[LinkedInExperience] = []
+    education: list[LinkedInEducation] = []
+    career_metrics: CareerMetrics | None = None
 
     def analyze_career(self) -> None:
         """

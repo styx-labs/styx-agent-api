@@ -1,5 +1,4 @@
 import requests
-import aiohttp
 from models.linkedin import (
     LinkedInProfile,
     LinkedInExperience,

@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional
+from typing import Optional
 from .serializable import SerializableModel
 from .jobs import Candidate, CalibratedProfiles
 from .linkedin import LinkedInProfile
@@ -7,7 +7,7 @@ from .linkedin import LinkedInProfile
 class EditKeyTraitsPayload(SerializableModel):
     """Payload for editing key traits"""
 
-    key_traits: List[dict]
+    key_traits: list[dict]
 
 
 class EditKeyTraitsLLMPayload(SerializableModel):
@@ -45,8 +45,8 @@ class HeadlessReachoutPayload(SerializableModel):
 
     name: str
     job_description: str
-    sections: List[dict]
-    citations: List[dict]
+    sections: list[dict]
+    citations: list[dict]
 
 
 class Calibration(SerializableModel):
@@ -63,7 +63,7 @@ class HeadlessEvaluationPayload(SerializableModel):
     url: Optional[str] = None
     candidate: Optional[LinkedInProfile] = None
     job_description: str
-    calibrations: Optional[List[Calibration]] = []
+    calibrations: Optional[list[Calibration]] = []
 
 
 class ParaformEvaluateGraphPayload(SerializableModel):
@@ -84,7 +84,7 @@ class ParaformEvaluateGraphLinkedinPayload(SerializableModel):
 class BulkLinkedInPayload(SerializableModel):
     """Payload for bulk LinkedIn processing"""
 
-    urls: List[str]
+    urls: list[str]
     search_mode: bool = True
 
 
@@ -117,16 +117,16 @@ class CandidateCalibrationPayload(SerializableModel):
 class BulkCalibrationPayload(SerializableModel):
     """Payload for bulk candidate calibration"""
 
-    feedback: Dict[str, CandidateCalibrationPayload]  # Dict of candidate_id to feedback
+    feedback: dict[str, CandidateCalibrationPayload]  # Dict of candidate_id to feedback
 
 
 class UpdateCalibratedProfilesPayload(SerializableModel):
     """Payload for updating calibrated profiles"""
 
-    calibrated_profiles: List[CalibratedProfiles]
+    calibrated_profiles: list[CalibratedProfiles]
 
 
 class BulkCandidatePayload(SerializableModel):
     """Payload for bulk candidate processing"""
 
-    candidate_ids: List[str]
+    candidate_ids: list[str]

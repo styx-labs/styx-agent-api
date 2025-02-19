@@ -1,9 +1,8 @@
-from typing import List, Optional, Literal
 from datetime import datetime
 from pydantic import Field
 from .serializable import SerializableModel
 from .linkedin import LinkedInProfile
-
+from typing import Literal
 
 class KeyTrait(SerializableModel):
     """Represents a key trait required for a job"""
@@ -17,9 +16,9 @@ class CalibratedProfiles(SerializableModel):
     """Represents a candidate to be calibrated"""
 
     url: str
-    fit: Optional[Literal["good", "bad"]] = None
-    reasoning: Optional[str] = None
-    profile: Optional[LinkedInProfile] = None
+    fit: Literal["good", "bad"] | None
+    reasoning: str | None
+    profile: LinkedInProfile | None
     type: Literal["ideal", "pipeline"] = "pipeline"
 
     def __str__(self):
@@ -37,8 +36,8 @@ class Job(SerializableModel):
     """Represents a job posting"""
 
     job_description: str
-    key_traits: List[KeyTrait]
-    calibrated_profiles: Optional[list[CalibratedProfiles]] = None
+    key_traits: list[KeyTrait]
+    calibrated_profiles: list[CalibratedProfiles] | None = None
     job_title: str
     company_name: str
     created_at: datetime = Field(default_factory=datetime.now)
@@ -48,7 +47,7 @@ class JobDescription(SerializableModel):
     """Represents a job description"""
 
     description: str
-    calibrated_profiles: List[CalibratedProfiles] = None
+    calibrated_profiles: list[CalibratedProfiles] | None = None
 
 
 class Candidate(SerializableModel):
@@ -57,7 +56,7 @@ class Candidate(SerializableModel):
     name: str = None
     context: str = None
     url: str
-    profile: Optional[LinkedInProfile] = None
+    profile: LinkedInProfile | None = None
     public_identifier: str = None
     number_of_queries: int = 5
     confidence_threshold: float = 0.5

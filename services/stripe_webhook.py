@@ -4,6 +4,12 @@ import logging
 from services.get_secret import get_secret
 import services.firestore as firestore
 
+CREDITS_BY_PLAN = {
+    "starter": 50,
+    "growth": 1000,
+    "pro": 5000,
+}
+
 
 async def handle_stripe_webhook(payload_str: str, sig_header: str):
     """Handle incoming Stripe webhook events"""
@@ -15,6 +21,7 @@ async def handle_stripe_webhook(payload_str: str, sig_header: str):
             event = stripe.Webhook.construct_event(
                 payload_str, sig_header, get_secret("stripe-webhook-secret", "1")
             )
+
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid payload: {str(e)}")
         except stripe.error.SignatureVerificationError as e:
@@ -34,13 +41,49 @@ async def handle_stripe_webhook(payload_str: str, sig_header: str):
                     detail="Missing user_id or plan_id in session metadata",
                 )
 
-            # Determine credits based on plan
-            credits_to_add = 100 if plan_id.lower() == "basic" else 500
+            # Add initial credits for the subscription
+            credits_to_add = CREDITS_BY_PLAN.get(plan_id.lower())
+            if credits_to_add:
+                new_total = firestore.add_search_credits(user_id, credits_to_add)
+                return {"status": "success", "new_credit_total": new_total}
 
-            # Add credits to user's account
-            new_total = firestore.add_search_credits(user_id, credits_to_add)
+        elif event["type"] == "customer.subscription.created":
+            # Handle new subscription creation
+            subscription = event["data"]["object"]
+            metadata = subscription.get("metadata", {})
+            user_id = metadata.get("user_id")
 
-            return {"status": "success", "new_credit_total": new_total}
+            if user_id:
+                # Store subscription info in Firestore for tracking
+                firestore.update_user_subscription(user_id, subscription.id, "active")
+
+        elif event["type"] == "invoice.payment_succeeded":
+            # Handle successful payment - add monthly credits
+            invoice = event["data"]["object"]
+            subscription_id = invoice.get("subscription")
+            if subscription_id:
+                subscription = stripe.Subscription.retrieve(subscription_id)
+                user_id = subscription.get("metadata", {}).get("user_id")
+                plan_id = subscription.get("metadata", {}).get("plan_id")
+
+                if user_id and plan_id:
+                    credits_to_add = CREDITS_BY_PLAN.get(plan_id.lower())
+                    if credits_to_add:
+                        new_total = firestore.add_search_credits(
+                            user_id, credits_to_add
+                        )
+                        return {"status": "success", "new_credit_total": new_total}
+
+        elif event["type"] == "customer.subscription.deleted":
+            # Handle subscription cancellation
+            subscription = event["data"]["object"]
+            metadata = subscription.get("metadata", {})
+            user_id = metadata.get("user_id")
+
+            if user_id:
+                firestore.update_user_subscription(
+                    user_id, subscription.id, "cancelled"
+                )
 
         return {"status": "success", "type": event["type"]}
 

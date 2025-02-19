@@ -1,22 +1,21 @@
 from pydantic import BaseModel
-from typing import Optional
 
 
 class UserTemplates(BaseModel):
     """Model for user's templates"""
 
-    linkedin_template: Optional[str] = None
-    email_template: Optional[str] = None
+    linkedin_template: str | None
+    email_template: str | None
 
 
 class TemplateUpdateRequest(BaseModel):
     """Model for updating both templates at once"""
 
-    linkedin_template: Optional[str] = None  # Content of LinkedIn template
-    email_template: Optional[str] = None  # Content of email template
+    linkedin_template: str | None
+    email_template: str | None
 
 
 class CustomInstructions(BaseModel):
     """Model for user's custom evaluation instructions"""
 
-    evaluation_instructions: Optional[str] = None
+    evaluation_instructions: str | None

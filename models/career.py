@@ -1,4 +1,3 @@
-from typing import List, Set, Optional
 from datetime import date
 from enum import Enum
 from .serializable import SerializableModel
@@ -51,7 +50,7 @@ class ExperienceStageMetrics(SerializableModel):
     company_name: str
     funding_stage: FundingStage
     joined_at: date
-    left_at: Optional[date]
+    left_at: date | None
     duration_months: int
     company_tier: CompanyTier
 
@@ -196,7 +195,7 @@ class TechStackPatterns:
     }
 
     @classmethod
-    def detect_tech_stacks(cls, text: str) -> Set[TechStack]:
+    def detect_tech_stacks(cls, text: str) -> set[TechStack]:
         """Detect tech stacks from text description."""
         text = text.lower()
         stacks = set()
@@ -231,20 +230,10 @@ class TechStackPatterns:
 class CareerMetrics(SerializableModel):
     """Model for career analysis metrics."""
 
-    total_experience_months: Optional[int] = None
-    average_tenure_months: Optional[int] = None
-    current_tenure_months: Optional[int] = None
-    tech_stacks: Optional[List[str]] = None
-    career_tags: Optional[List[str]] = None
-    experience_tags: Optional[List[str]] = None
-
-    def to_dict(self) -> dict:
-        """Convert career metrics to a dictionary format."""
-        return {
-            "total_experience_months": self.total_experience_months,
-            "average_tenure_months": self.average_tenure_months,
-            "current_tenure_months": self.current_tenure_months,
-            "tech_stacks": self.tech_stacks,
-            "career_tags": self.career_tags,
-            "experience_tags": self.experience_tags,
-        }
+    total_experience_months: int | None
+    average_tenure_months: int | None
+    current_tenure_months: int | None
+    tech_stacks: list[str] | None
+    career_tags: list[str] | None
+    experience_tags: list[str] | None
+    latest_experience_level: str | None = None

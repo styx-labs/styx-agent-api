@@ -1,4 +1,3 @@
-from typing import List, Dict, Optional
 import asyncio
 from fastapi import HTTPException, status
 from agents.linkedin_processor import get_linkedin_profile_with_companies
@@ -6,10 +5,9 @@ import services.firestore as firestore
 from models.jobs import KeyTrait, Candidate, CalibratedProfiles
 import psutil
 import logging
-from datetime import datetime, UTC
+from datetime import datetime
 from services.evaluate import run_graph
 from services.firestore import get_custom_instructions
-from utils.linkedin_utils import extract_linkedin_id
 import uuid
 from fastapi.concurrency import run_in_threadpool
 from models.api import CandidateCalibrationPayload
@@ -55,7 +53,7 @@ class CandidateProcessor:
             return match.group(1) if match else None
         except Exception:
             return None
-        
+
     async def evaluate_single_candidate(self, candidate_data: Dict) -> dict:
         """Evaluate a single candidate without creating a candidate record and returning the result"""
         try:
@@ -86,8 +84,7 @@ class CandidateProcessor:
                 detail=f"Error running candidate evaluation: {str(e)}",
             )
 
-
-    async def process_single_candidate(self, candidate_data: Dict) -> None:
+    async def process_single_candidate(self, candidate_data: dict) -> None:
         """Process a single candidate with evaluation"""
         try:
             logging.info(
@@ -143,7 +140,7 @@ class CandidateProcessor:
                         self.job_data.get("created_at").isoformat()
                         if isinstance(self.job_data.get("created_at"), datetime)
                         else self.job_data.get("created_at")
-                    )
+                    ),
                 ),
             )
 
@@ -213,8 +210,7 @@ class CandidateProcessor:
                 detail=f"Error running candidate evaluation: {str(e)}",
             )
 
-    @staticmethod
-    def get_candidate_record(candidate_data: Dict) -> Optional[Dict]:
+    def get_candidate_record(self, candidate_data: dict) -> dict | None:
         """Get candidate record from LinkedIn URL with enriched company data."""
         try:
             public_id = CandidateProcessor._extract_linkedin_id(candidate_data["url"])
@@ -277,7 +273,7 @@ class CandidateProcessor:
             print(f"Error getting candidate record: {str(e)}")
             return None
 
-    async def process_urls(self, urls: List[str], search_mode: bool = True) -> None:
+    async def process_urls(self, urls: list[str], search_mode: bool = True) -> None:
         """Process a list of LinkedIn URLs in bulk."""
         try:
             logging.info(f"Processing {len(urls)} LinkedIn URLs")
@@ -395,7 +391,7 @@ class CandidateProcessor:
             )
 
     async def bulk_calibrate_candidates(
-        self, feedback: Dict[str, CandidateCalibrationPayload]
+        self, feedback: dict[str, CandidateCalibrationPayload]
     ) -> None:
         """Calibrate multiple candidates in bulk"""
         try:

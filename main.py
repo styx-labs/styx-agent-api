@@ -42,7 +42,6 @@ from agents.candidate_processor import CandidateProcessor
 from services.stripe import create_checkout_session
 import logging
 import sys
-from typing import Optional, List
 from services.firestore import (
     get_user_templates,
     set_user_templates,
@@ -276,7 +275,7 @@ async def create_candidate(
 @app.get("/jobs/{job_id}/candidates")
 def get_candidates(
     job_id: str,
-    filter_traits: Optional[List[str]] = Query(
+    filter_traits: list[str] | None = Query(
         None, description="List of traits to filter by"
     ),
     user_id: str = Depends(validate_user_id),
@@ -620,7 +619,7 @@ async def get_evaluation_instructions(
 
 
 # Payment and Credits
-@app.post("/get-search-credits")
+@app.get("/get-search-credits")
 def get_search_credits(user_id: str = Depends(validate_user_id)):
     try:
         return {"search_credits": firestore.get_search_credits(user_id)}
@@ -817,4 +816,22 @@ async def update_calibrated_profiles(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error updating calibrated profiles: {str(e)}",
+        )
+
+
+@app.get("/jobs/{job_id}/candidates/{candidate_id}")
+def get_candidate(
+    job_id: str, candidate_id: str, user_id: str = Depends(validate_user_id)
+):
+    """Get a specific candidate for a job with their full information"""
+    try:
+        if not firestore.check_candidate_in_job(job_id, candidate_id, user_id):
+            return {"success": False, "candidate": None}
+
+        candidate = firestore.get_full_candidate(job_id, candidate_id, user_id)
+        return {"success": True, "candidate": candidate}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving candidate: {str(e)}",
         )

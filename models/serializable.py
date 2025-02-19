@@ -1,4 +1,4 @@
-from typing import TypeVar, Type, Optional
+from typing import TypeVar, Type
 from datetime import date, datetime
 from pydantic import BaseModel
 
@@ -15,7 +15,7 @@ class SerializableModel(BaseModel):
         return self._serialize_dict(d)
 
     @classmethod
-    def from_dict(cls: Type[T], data: dict) -> Optional[T]:
+    def from_dict(cls: Type[T], data: dict) -> T | None:
         """Create model instance from a Firestore dictionary."""
         if not data:
             return None

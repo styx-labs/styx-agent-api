@@ -6,7 +6,6 @@ from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
 import sys
 from agents.search_credits import free_searches
 from datetime import datetime, timedelta, UTC
-from typing import List, Dict, Optional
 from models.templates import UserTemplates
 from models.instructions import CustomInstructions
 import logging
@@ -241,7 +240,7 @@ def create_candidate(candidate_data: dict) -> str:
 
 
 def get_candidates(
-    job_id: str, user_id: str, filter_traits: Optional[List[str]] = None
+    job_id: str, user_id: str, filter_traits: list[str] | None = None
 ) -> list:
     """Get all candidates for a specific job, sorted by match criteria."""
     # Get all job-specific candidate data in one batch
@@ -305,7 +304,7 @@ def get_candidates(
     return loading_indicators + sorted_candidates
 
 
-def _meets_trait_requirements(sections: List[Dict], required_traits: List[str]) -> bool:
+def _meets_trait_requirements(sections: list[dict], required_traits: list[str]) -> bool:
     """Check if candidate meets all required trait requirements."""
     trait_values = {
         section["section"]: section["value"]
@@ -456,7 +455,7 @@ def get_custom_instructions(user_id: str) -> CustomInstructions:
     doc = settings_ref.document("evaluation_instructions").get()
 
     return CustomInstructions(
-        evaluation_instructions=doc.get("content") if doc.exists else None
+        evaluation_instructions=doc.get("content") if doc.exists else ""
     )
 
 
@@ -496,7 +495,7 @@ def toggle_candidate_favorite(job_id: str, candidate_id: str, user_id: str) -> b
 
 
 def bulk_remove_candidates_from_job(
-    job_id: str, candidate_ids: List[str], user_id: str
+    job_id: str, candidate_ids: list[str], user_id: str
 ) -> bool:
     """Remove multiple candidates from a job efficiently using batched writes"""
     batch = db.batch()
@@ -528,7 +527,7 @@ def bulk_remove_candidates_from_job(
 
 
 def bulk_favorite_candidates(
-    job_id: str, candidate_ids: List[str], user_id: str, favorite_status: bool = True
+    job_id: str, candidate_ids: list[str], user_id: str, favorite_status: bool = True
 ) -> bool:
     """Set favorite status for multiple candidates efficiently using batched writes"""
     batch = db.batch()
@@ -575,10 +574,56 @@ def edit_job(job_id: str, user_id: str, job_data: dict) -> bool:
 def check_candidate_in_job(job_id: str, candidate_id: str, user_id: str) -> bool:
     """Check if a candidate already exists in a job"""
     doc_ref = (
-        db.collection("users").document(user_id).collection("jobs").document(job_id)
+        db.collection("users")
+        .document(user_id)
+        .collection("jobs")
+        .document(job_id)
+        .collection("candidates")
+        .document(candidate_id)
     )
     doc = doc_ref.get()
-    if not doc.exists:
-        return False
-    job_data = doc.to_dict()
-    return candidate_id in job_data.get("candidates", {})
+    return doc.exists
+
+
+def update_user_subscription(user_id: str, subscription_id: str, status: str) -> None:
+    """Update a user's subscription status in Firestore
+
+    Args:
+        user_id: The ID of the user
+        subscription_id: The Stripe subscription ID
+        status: The subscription status ('active' or 'cancelled')
+    """
+    doc_ref = db.collection("users").document(user_id)
+    doc = doc_ref.get()
+    user_dict = doc.to_dict() if doc.exists else {}
+
+    user_dict["subscription"] = {
+        "id": subscription_id,
+        "status": status,
+        "updated_at": datetime.now(UTC).isoformat(),
+    }
+
+    doc_ref.set(user_dict)
+
+
+def get_free_tier_users() -> list[str]:
+    """Get all users on the free tier
+
+    Returns:
+        List of user IDs who are on the free tier (no subscription or free_tier status)
+    """
+    users_ref = db.collection("users")
+    
+    # Get users with free_tier status
+    free_tier_users = users_ref.where("subscription.status", "==", "free_tier").stream()
+    
+    # Get users with no subscription field
+    no_subscription_users = users_ref.where("subscription", "==", None).stream()
+    
+    user_ids = []
+    for user in free_tier_users:
+        user_ids.append(user.id)
+    for user in no_subscription_users:
+        user_ids.append(user.id)
+    
+    return user_ids
