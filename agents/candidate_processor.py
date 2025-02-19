@@ -14,6 +14,7 @@ from models.api import CandidateCalibrationPayload
 from models.jobs import Job
 from models.linkedin import LinkedInProfile
 import re
+from typing import Optional, Dict
 
 
 class CandidateProcessor:
