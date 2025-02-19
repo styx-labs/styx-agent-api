@@ -551,44 +551,6 @@ def bulk_favorite_candidates(
         )
 
 
-@app.post("/jobs/{job_id}/candidates/{candidate_id}/generate-reachout")
-async def generate_reachout(
-    job_id: str,
-    candidate_id: str,
-    payload: ReachoutPayload,
-    user_id: str = Depends(validate_user_id),
-):
-    try:
-        job = firestore.get_job(job_id, user_id)
-        if not job:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Job with id {job_id} not found",
-            )
-        candidate = firestore.get_full_candidate(job_id, candidate_id, user_id)
-        if not candidate:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Candidate with id {candidate_id} not found",
-            )
-
-        reachout = get_reachout_message(
-            name=candidate["name"],
-            job_description=job["job_description"],
-            sections=candidate["sections"],
-            citations=candidate["citations"],
-            format=payload.format,
-            user_id=user_id,
-        )
-        return {"reachout": reachout}
-    except Exception as e:
-        print(e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error generating reachout message: {str(e)}",
-        )
-
-
 # LinkedIn and Email Operations
 @app.post("/get_linkedin_context")
 def get_linkedin_context_request(url: str, user_id: str = Depends(validate_user_id)):
