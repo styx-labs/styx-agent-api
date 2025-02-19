@@ -3,7 +3,7 @@ from openai import AzureOpenAI
 from langchain_openai import AzureChatOpenAI
 from langchain_core.language_models import BaseLanguageModel
 from services.get_secret import get_secret
-from langchain_google_vertexai import VertexAI
+from langchain_google_vertexai import ChatVertexAI
 
 
 openai_4o = AzureChatOpenAI(
@@ -24,7 +24,7 @@ openai_4o_mini = AzureChatOpenAI(
     max_retries=5,
 )
 
-gemini_2_flash = VertexAI(
+gemini_2_flash = ChatVertexAI(
     model="gemini-2.0-flash-001",
 )
 

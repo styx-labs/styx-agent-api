@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Optional
 from .serializable import SerializableModel
 from .linkedin import LinkedInProfile
 from .jobs import Job, KeyTrait
@@ -10,6 +10,18 @@ class KeyTraitsOutput(SerializableModel):
     key_traits: list[KeyTrait]
     job_title: str
     company_name: str
+
+
+class EditKeyTraitsOutput(SerializableModel):
+    """Output from key traits editing"""
+
+    key_traits: list[KeyTrait]
+
+
+class EditJobDescriptionOutput(SerializableModel):
+    """Output from job description editing"""
+
+    job_description: str
 
 
 class TraitEvaluationOutput(SerializableModel):
@@ -26,7 +38,24 @@ class SearchInputState(SerializableModel):
     job: Job
     number_of_queries: int
     confidence_threshold: float
-    custom_instructions: str
+    custom_instructions: Optional[str] = None
+
+
+class HeadlessEvaluationOutput(SerializableModel):
+    """Output from headless evaluation"""
+
+    value: int
+    evaluation: str
+
+
+class EvaluationInputState(SerializableModel):
+    """Input state for evaluation"""
+
+    profile: LinkedInProfile
+    job: Job
+    number_of_queries: int
+    confidence_threshold: float
+    custom_instructions: Optional[str] = None
 
 
 class EvaluationInputState(SerializableModel):
@@ -36,7 +65,7 @@ class EvaluationInputState(SerializableModel):
     job: Job
     source_str: str
     citations: list[dict]
-    custom_instructions: str
+    custom_instructions: Optional[str] = None
 
 
 class EvaluationOutputState(SerializableModel):

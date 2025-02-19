@@ -1,11 +1,31 @@
+from typing import Optional
 from .serializable import SerializableModel
 from .jobs import Candidate, CalibratedProfiles
+from .linkedin import LinkedInProfile
 
 
 class EditKeyTraitsPayload(SerializableModel):
     """Payload for editing key traits"""
 
     key_traits: list[dict]
+
+
+class EditKeyTraitsLLMPayload(SerializableModel):
+    """Payload for editing key traits with LLM"""
+
+    prompt: str
+
+
+class EditJobDescriptionPayload(SerializableModel):
+    """Payload for editing job description"""
+
+    job_description: str
+
+
+class EditJobDescriptionLLMPayload(SerializableModel):
+    """Payload for editing job description with LLM"""
+
+    prompt: str
 
 
 class HeadlessEvaluatePayload(Candidate):
@@ -27,6 +47,23 @@ class HeadlessReachoutPayload(SerializableModel):
     job_description: str
     sections: list[dict]
     citations: list[dict]
+
+
+class Calibration(SerializableModel):
+    """Calibration model"""
+
+    url: Optional[str] = None
+    candidate: Optional[LinkedInProfile] = None
+    calibration_result: str
+
+
+class HeadlessEvaluationPayload(SerializableModel):
+    """Payload for headless evaluation"""
+
+    url: Optional[str] = None
+    candidate: Optional[LinkedInProfile] = None
+    job_description: str
+    calibrations: Optional[list[Calibration]] = []
 
 
 class ParaformEvaluateGraphPayload(SerializableModel):
@@ -68,12 +105,6 @@ class TestTemplateRequest(SerializableModel):
 
     format: str
     template_content: str
-
-
-class PipelineFeedbackPayload(SerializableModel):
-    """Payload for pipeline-level feedback"""
-
-    feedback: str
 
 
 class CandidateCalibrationPayload(SerializableModel):

@@ -64,6 +64,14 @@ def edit_key_traits(job_id: str, user_id: str, key_traits: dict):
     doc_ref.update(key_traits)
 
 
+def edit_job_description(job_id: str, user_id: str, job_description: dict):
+    """Edit the job description for a job"""
+    doc_ref = (
+        db.collection("users").document(user_id).collection("jobs").document(job_id)
+    )
+    doc_ref.update(job_description)
+
+
 def create_job(job_data: dict, user_id: str) -> str:
     """Create a job under the user's collection with optimized embedding"""
     # Generate document reference first to avoid extra writes
