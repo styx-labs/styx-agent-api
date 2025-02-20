@@ -3,12 +3,26 @@ from enum import Enum
 from .serializable import SerializableModel
 
 
-# Move all the Enum classes and career analysis related classes here
-class FundingStage(str, Enum):
-    """Enum for company funding stages."""
+class FundingType(str, Enum):
+    """Detailed funding type classification."""
 
-    PRE_SEED = "Pre-Seed"
-    SEED = "Seed"
+    ANGEL = "Angel Round"
+    CONVERTIBLE_NOTE = "Convertible Note"
+    CORPORATE = "Corporate Round"
+    DEBT = "Debt Financing"
+    EQUITY_CROWDFUNDING = "Equity Crowdfunding"
+    GENERIC = "Funding Round"
+    GRANT = "Grant"
+    ICO = "Initial Coin Offering"
+    NON_EQUITY = "Non Equity Assistance"
+    POST_IPO_DEBT = "Post-IPO Debt"
+    POST_IPO_EQUITY = "Post-IPO Equity"
+    POST_IPO_SECONDARY = "Post-IPO Secondary"
+    PRE_SEED = "Pre Seed Round"
+    PRIVATE_EQUITY = "Private Equity Round"
+    PRODUCT_CROWDFUNDING = "Product Crowdfunding"
+    SECONDARY_MARKET = "Secondary Market"
+    SEED = "Seed Round"
     SERIES_A = "Series A"
     SERIES_B = "Series B"
     SERIES_C = "Series C"
@@ -19,9 +33,7 @@ class FundingStage(str, Enum):
     SERIES_H = "Series H"
     SERIES_I = "Series I"
     SERIES_J = "Series J"
-    SERIES_K = "Series K"
-    IPO = "IPO"
-    ACQUIRED = "Acquired"
+    VENTURE = "Venture Round"
     UNKNOWN = "Unknown"
 
 
@@ -48,7 +60,7 @@ class ExperienceStageMetrics(SerializableModel):
     """Model for experience at a particular company stage."""
 
     company_name: str
-    funding_stage: FundingStage
+    funding_stage: FundingType
     joined_at: date
     left_at: date | None
     duration_months: int

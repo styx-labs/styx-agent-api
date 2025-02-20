@@ -13,8 +13,7 @@ from fastapi.concurrency import run_in_threadpool
 from models.api import CandidateCalibrationPayload
 from models.jobs import Job
 from models.linkedin import LinkedInProfile
-import re
-from typing import Optional, Dict
+from utils.linkedin_utils import extract_linkedin_id
 
 
 class CandidateProcessor:
@@ -41,21 +40,7 @@ class CandidateProcessor:
             f"VMS: {memory_info.vms / 1024 / 1024:.2f}MB"
         )
 
-    @staticmethod
-    def _extract_linkedin_id(url: str) -> Optional[str]:
-        """Extract the LinkedIn public identifier from a profile URL."""
-        try:
-            # Remove any query parameters
-            url = url.split("?")[0]
-            # Remove trailing slash if present
-            url = url.rstrip("/")
-            # Get the last part of the URL which should be the ID
-            match = re.search(r"linkedin\.com/in/([^/]+)", url)
-            return match.group(1) if match else None
-        except Exception:
-            return None
-
-    async def evaluate_single_candidate(self, candidate_data: Dict) -> dict:
+    async def evaluate_single_candidate(self, candidate_data: dict) -> dict:
         """Evaluate a single candidate without creating a candidate record and returning the result"""
         try:
             key_traits = [KeyTrait(**trait) for trait in self.job_data["key_traits"]]
@@ -214,7 +199,7 @@ class CandidateProcessor:
     def get_candidate_record(self, candidate_data: dict) -> dict | None:
         """Get candidate record from LinkedIn URL with enriched company data."""
         try:
-            public_id = CandidateProcessor._extract_linkedin_id(candidate_data["url"])
+            public_id = extract_linkedin_id(candidate_data["url"])
             if not public_id:
                 print(
                     f"Could not extract public identifier from {candidate_data['url']}"
