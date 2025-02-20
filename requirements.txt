@@ -11,7 +11,6 @@ nltk
 requests
 beautifulsoup4
 langgraph
-tavily-python
 urllib3
 firebase-admin>=6.4.0
 psutil

@@ -1,8 +1,7 @@
 import re
 from models.linkedin import LinkedInProfile, LinkedInCompany
 
-# from services.crustdata import get_linkedin_profile, get_company
-from services.proxycurl import get_linkedin_profile, get_company
+from services.proxycurl import get_linkedin_profile
 from services.firestore import db
 import logging
 import services.firestore as firestore
@@ -16,7 +15,6 @@ def get_experience_companies(profile: LinkedInProfile) -> None:
     If not, fetch from Crustdata and store in Firebase.
     Attaches company data to each experience in the profile.
     """
-    tasks = []
     for exp in profile.experiences:
         if (
             exp.company_linkedin_profile_url
@@ -37,16 +35,6 @@ def get_experience_companies(profile: LinkedInProfile) -> None:
                     company_data = company_doc.to_dict()
                     exp.company_data = LinkedInCompany(**company_data)
                 else:
-                    # # Add to list of companies to fetch
-                    # tasks.append((exp, company_id, company_ref))
-
-                    # company = get_company(exp.company_linkedin_profile_url)
-                    # if company:
-                    #     company_dict = company.dict()
-                    #     company_ref.set(company_dict)
-                    #     exp.company_data = company
-                    # else:
-                    #     exp.company_data = None
                     exp.company_data = None
 
 

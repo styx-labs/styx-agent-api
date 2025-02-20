@@ -5,160 +5,67 @@ LinkedIn data models with standardized serialization.
 import re
 from datetime import date
 from .serializable import SerializableModel
-from .career import (
-    CareerMetrics,
-    FundingStage,
-)
 from services.firestore import db
-
-
-class CompanyLocation(SerializableModel):
-    """Model for company location data."""
-
-    city: str | None = None
-    country: str | None = None
-    is_hq: bool = False
-    line_1: str | None = None
-    postal_code: str | None = None
-    state: str | None = None
-
-
-class AffiliatedCompany(SerializableModel):
-    """Model for affiliated company data."""
-
-    industry: str | None = None
-    link: str | None = None
-    location: str | None = None
-    name: str | None = None
-
-
-class CompanyUpdate(SerializableModel):
-    """Model for company update data."""
-
-    article_link: str | None = None
-    image: str | None = None
-    posted_on: dict | None = None
-    text: str | None = None
-    total_likes: int | None = None
-
-
-class Investor(SerializableModel):
-    """Model for investor data."""
-
-    linkedin_profile_url: str | None = None
-    name: str | None = None
-    type: str | None = None
+from .career import CareerMetrics, FundingType
 
 
 class Funding(SerializableModel):
     """Model for funding round data."""
 
-    funding_type: str | None = None
+    funding_type: FundingType = FundingType.UNKNOWN
     money_raised: int | None = None
-    announced_date: dict | None = None
+    announced_date: date | None = None
     number_of_investors: int | None = None
-    investor_list: list[Investor] = []
+    investor_list: list[str] = []
 
 
 class LinkedInCompany(SerializableModel):
     """Model for LinkedIn company profile data."""
 
-    company_name: str
-    description: str | None = None
+    company_id: str
+    name: str
     website: str | None = None
-    industry: str | None = None
-    company_size: list[int | None] | None = None
-    company_size_on_linkedin: int | None = None
-    company_type: str | None = None
-    founded_year: int | None = None
-    specialties: list[str] = []
-    locations: list[CompanyLocation] = []
-    hq: CompanyLocation | None = None
-    follower_count: int | None = None
-    profile_pic_url: str | None = None
-    background_cover_image_url: str | None = None
-    tagline: str | None = None
-    universal_name_id: str | None = None
-    linkedin_internal_id: str | None = None
-    search_id: str | None = None
-    updates: list[CompanyUpdate] = []
-    similar_companies: list[AffiliatedCompany] = []
-    affiliated_companies: list[AffiliatedCompany] = []
-    funding_data: list[Funding] | None = None
-
-    def _determine_funding_stage(self, funding) -> FundingStage:
-        """Helper method to determine funding stage from a funding round."""
-        funding_type = funding.funding_type.lower() if funding.funding_type else ""
-
-        if "ipo" in funding_type:
-            return FundingStage.IPO
-        elif "series d" in funding_type:
-            return FundingStage.SERIES_D
-        elif "series e" in funding_type:
-            return FundingStage.SERIES_E
-        elif "series f" in funding_type:
-            return FundingStage.SERIES_F
-        elif "series g" in funding_type:
-            return FundingStage.SERIES_G
-        elif "series h" in funding_type:
-            return FundingStage.SERIES_H
-        elif "series i" in funding_type:
-            return FundingStage.SERIES_I
-        elif "series j" in funding_type:
-            return FundingStage.SERIES_J
-        elif "series k" in funding_type:
-            return FundingStage.SERIES_K
-        elif "series c" in funding_type:
-            return FundingStage.SERIES_C
-        elif "series b" in funding_type:
-            return FundingStage.SERIES_B
-        elif "series a" in funding_type:
-            return FundingStage.SERIES_A
-        elif "pre seed" in funding_type:
-            return FundingStage.PRE_SEED
-        elif "seed" in funding_type:
-            return FundingStage.SEED
-        return FundingStage.UNKNOWN
+    linkedin: str | None = None
+    crunchbase: str | None = None
+    location: dict[str, str] | None = None
+    description: str | None = None
+    industries: list[str] = []
+    funding_data: list[Funding] = []
+    founded_on: str | None = None
+    ipo_status: str | None = None
+    operating_status: str | None = None
 
     @property
-    def funding_stage(self) -> FundingStage:
+    def funding_stage(self) -> FundingType:
         """Get the current funding stage of the company."""
         if not self.funding_data:
-            return FundingStage.UNKNOWN
+            return FundingType.UNKNOWN
+        return self.funding_data[-1].funding_type
 
-        latest_funding = self.funding_data[-1]
-        return self._determine_funding_stage(latest_funding)
-
-    def get_funding_stage_at_date(self, target_date: date) -> FundingStage:
+    def get_funding_stage_at_date(self, target_date: date) -> FundingType:
         """Get the company's funding stage at a specific date."""
         if not self.funding_data:
-            return FundingStage.UNKNOWN
+            return FundingType.UNKNOWN
 
-        current_stage = FundingStage.UNKNOWN
+        current_stage = FundingType.UNKNOWN
 
         for funding in sorted(
             [f for f in self.funding_data if f.announced_date],
-            key=lambda x: x.announced_date.get("year", 0) * 12
-            + x.announced_date.get("month", 0),
+            key=lambda x: x.announced_date,
         ):
             try:
-                funding_date = date(
-                    year=funding.announced_date.get("year", 1900),
-                    month=funding.announced_date.get("month", 1),
-                    day=1,
-                )
-                if funding_date <= target_date:
-                    current_stage = self._determine_funding_stage(funding)
+                if funding.announced_date <= target_date:
+                    current_stage = funding.funding_type
                 else:
                     break
-            except (KeyError, ValueError, TypeError):
+            except (ValueError, TypeError):
                 continue
 
         return current_stage
 
     def get_funding_stages_between_dates(
         self, start_date: date, end_date: date = None, cutoff_date: date = None
-    ) -> list[FundingStage]:
+    ) -> list[FundingType]:
         """Get the sequence of funding stages between two dates.
 
         Args:
@@ -176,44 +83,94 @@ class LinkedInCompany(SerializableModel):
         valid_funding = [
             f
             for f in self.funding_data
-            if f.announced_date
-            and (
-                not cutoff_date
-                or date(
-                    year=f.announced_date.get("year", 1900),
-                    month=f.announced_date.get("month", 1),
-                    day=1,
-                )
-                >= cutoff_date
-            )
+            if f.announced_date and (not cutoff_date or f.announced_date) >= cutoff_date
         ]
 
         if not valid_funding:
-            return [FundingStage.UNKNOWN]
+            return [FundingType.UNKNOWN]
 
         # Get initial stage from valid funding rounds
         current_stage = self.get_funding_stage_at_date(start_date)
 
-        for funding in sorted(
-            valid_funding,
-            key=lambda x: x.announced_date.get("year", 0) * 12
-            + x.announced_date.get("month", 0),
-        ):
+        for funding in sorted(valid_funding, key=lambda x: x.announced_date):
             try:
-                funding_date = date(
-                    year=funding.announced_date.get("year", 1900),
-                    month=funding.announced_date.get("month", 1),
-                    day=1,
-                )
+                funding_date = funding.announced_date
                 if start_date < funding_date <= end_date:
-                    stage = self._determine_funding_stage(funding)
+                    stage = funding.funding_type
                     if stage != current_stage:
                         relevant_rounds.append(stage)
                         current_stage = stage
-            except (KeyError, ValueError, TypeError):
+            except (ValueError, TypeError):
                 continue
 
         return list(dict.fromkeys([current_stage] + relevant_rounds))
+
+    def to_context_string(self) -> str:
+        """Convert the company profile to a formatted string context."""
+        context = f"Company: {self.name}\n\n"
+
+        if self.description:
+            context += f"Description: {self.description}\n\n"
+
+        if self.location:
+            location_str = ", ".join(
+                filter(
+                    None,
+                    [
+                        self.location.get("city"),
+                        self.location.get("state"),
+                        self.location.get("country"),
+                    ],
+                )
+            )
+            if location_str:
+                context += f"Location: {location_str}\n\n"
+
+        if self.industries:
+            context += f"Industries: {', '.join(self.industries)}\n\n"
+
+        if self.founded_on:
+            context += f"Founded: {self.founded_on}\n\n"
+
+        if self.funding_data:
+            # Calculate total funding using proper attribute access
+            total_funding = sum(
+                round.money_raised
+                for round in self.funding_data
+                if round.money_raised is not None
+            )
+            if total_funding:
+                context += f"Total Funding: ${total_funding:,.0f}\n"
+
+            # Add latest funding round using proper date comparison
+            latest_funding = next(
+                (
+                    round
+                    for round in sorted(
+                        self.funding_data,
+                        key=lambda x: x.announced_date or date.min,
+                        reverse=True,
+                    )
+                    if round.announced_date
+                ),
+                None,
+            )
+
+            if latest_funding:
+                context += f"Latest Funding: {latest_funding.funding_type.value}"
+                if latest_funding.money_raised is not None:
+                    context += f" (${latest_funding.money_raised:,.0f})"
+                if latest_funding.investor_list:
+                    context += f"\nInvestors: {', '.join(latest_funding.investor_list)}"
+                context += "\n\n"
+
+        if self.ipo_status:
+            context += f"IPO Status: {self.ipo_status}\n"
+
+        if self.operating_status:
+            context += f"Status: {self.operating_status}\n"
+
+        return context.strip()
 
 
 class AILinkedinJobDescription(SerializableModel):
@@ -236,7 +193,7 @@ class LinkedInExperience(SerializableModel):
     experience_tags: list[str] | None = None
 
     @property
-    def funding_stages_during_tenure(self) -> list[FundingStage] | None:
+    def funding_stages_during_tenure(self) -> list[FundingType] | None:
         """Calculate the funding stages of the company during this person's tenure."""
         if (
             not self.company_linkedin_profile_url
@@ -289,7 +246,7 @@ class LinkedInExperience(SerializableModel):
         d["duration_months"] = self.duration_months
         if self.funding_stages_during_tenure:
             d["funding_stages_during_tenure"] = [
-                stage.value for stage in self.funding_stages_during_tenure
+                stage for stage in self.funding_stages_during_tenure
             ]
 
         return d
@@ -382,22 +339,7 @@ class LinkedInProfile(SerializableModel):
                 context += f"End Month: {exp.ends_at.month}\n"
 
             if exp.company_data:
-                company = exp.company_data
-                context += "\nCompany Information:\n"
-                if company.industry:
-                    context += f"Industry: {company.industry}\n"
-                if company.company_size:
-                    context += f"Company Size: {company.company_size}\n"
-                if company.description:
-                    context += f"Company Description: {company.description}\n"
-                if company.specialties:
-                    context += (
-                        f"Company Specialties: {', '.join(company.specialties)}\n"
-                    )
-                if company.company_type:
-                    context += f"Company Type: {company.company_type}\n"
-                if company.hq:
-                    context += f"Headquarters: {company.hq.city}, {company.hq.state}, {company.hq.country}\n"
+                context += exp.company_data.to_context_string()
 
             if exp.summarized_job_description:
                 context += (

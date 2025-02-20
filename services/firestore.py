@@ -4,7 +4,6 @@ import dotenv
 from google.cloud.firestore_v1.vector import Vector
 from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
 import sys
-from agents.search_credits import free_searches
 from datetime import datetime, timedelta, UTC
 from models.templates import UserTemplates
 from models.instructions import CustomInstructions
@@ -24,7 +23,7 @@ def get_search_credits(user_id: str) -> int:
     doc = doc_ref.get()
     user_dict = doc.to_dict() if doc.exists else {}
     if "search_credits" not in user_dict:
-        user_dict["search_credits"] = free_searches
+        user_dict["search_credits"] = 100
         doc_ref.set(user_dict)
     return user_dict["search_credits"]
 
@@ -50,7 +49,7 @@ def decrement_search_credits(user_id: str) -> int:
     doc = doc_ref.get()
     user_dict = doc.to_dict() if doc.exists else {}
     if "search_credits" not in user_dict:
-        user_dict["search_credits"] = free_searches
+        user_dict["search_credits"] = 100
     user_dict["search_credits"] -= 1
     doc_ref.set(user_dict)
     return user_dict["search_credits"]
@@ -613,17 +612,17 @@ def get_free_tier_users() -> list[str]:
         List of user IDs who are on the free tier (no subscription or free_tier status)
     """
     users_ref = db.collection("users")
-    
+
     # Get users with free_tier status
     free_tier_users = users_ref.where("subscription.status", "==", "free_tier").stream()
-    
+
     # Get users with no subscription field
     no_subscription_users = users_ref.where("subscription", "==", None).stream()
-    
+
     user_ids = []
     for user in free_tier_users:
         user_ids.append(user.id)
     for user in no_subscription_users:
         user_ids.append(user.id)
-    
+
     return user_ids

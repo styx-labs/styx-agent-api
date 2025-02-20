@@ -5,7 +5,7 @@ Career analysis functions for LinkedIn profiles.
 from datetime import date
 from collections import defaultdict
 from models.linkedin import LinkedInProfile, LinkedInExperience
-from models.career import CareerMetrics
+from models.career import CareerMetrics, FundingType
 from .constants import unicorns, big_tech, quant
 from .career_levels import determine_career_level_llm
 
@@ -275,22 +275,42 @@ def generate_experience_tags(pro_exps: list[LinkedInExperience]) -> list[str]:
 
         stages = exp.company_data.funding_data
         if stages:
-            stages_lower = {s.funding_type.lower() for s in stages}
-            if {"pre seed", "seed", "series a", "series b"} in stages_lower:
+            stage_types = {
+                stage.funding_type for stage in stages
+            }  # Using FundingType enum
+
+            early_stages = {
+                FundingType.PRE_SEED,
+                FundingType.SEED,
+                FundingType.SERIES_A,
+                FundingType.SERIES_B,
+                FundingType.ANGEL,
+                FundingType.CONVERTIBLE_NOTE,
+            }
+
+            growth_stages = {
+                FundingType.SERIES_C,
+                FundingType.SERIES_D,
+                FundingType.SERIES_E,
+                FundingType.SERIES_F,
+                FundingType.SERIES_G,
+                FundingType.SERIES_H,
+                FundingType.SERIES_I,
+                FundingType.SERIES_J,
+            }
+
+            public_stages = {
+                FundingType.POST_IPO_DEBT,
+                FundingType.POST_IPO_EQUITY,
+                FundingType.POST_IPO_SECONDARY,
+            }
+
+            # Use set intersection to check if any stages match
+            if stage_types & early_stages:  # & is set intersection
                 tags.add("Startup Experience")
-            elif {
-                "series c",
-                "series d",
-                "series e",
-                "series f",
-                "series g",
-                "series h",
-                "series i",
-                "series j",
-                "series k",
-            } in stages_lower:
+            elif stage_types & growth_stages:
                 tags.add("Growth Company Experience")
-            elif {"ipo", "public"} in stages_lower:
+            elif stage_types & public_stages:
                 tags.add("Public Company Experience")
 
     return list(tags)
