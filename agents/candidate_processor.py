@@ -40,37 +40,7 @@ class CandidateProcessor:
             f"VMS: {memory_info.vms / 1024 / 1024:.2f}MB"
         )
 
-    async def evaluate_single_candidate(self, candidate_data: dict) -> dict:
-        """Evaluate a single candidate without creating a candidate record and returning the result"""
-        try:
-            key_traits = [KeyTrait(**trait) for trait in self.job_data["key_traits"]]
-            return await run_graph(
-                job_description=self.job_data["job_description"],
-                candidate_context=candidate_data["context"],
-                candidate_full_name=candidate_data["name"],
-                profile=candidate_data["profile"],
-                key_traits=key_traits,
-                ideal_profiles=self.job_data["ideal_profiles"],
-                number_of_queries=candidate_data.get("number_of_queries", 0),
-                confidence_threshold=candidate_data.get("confidence_threshold", 0.0),
-                search_mode=candidate_data.get("search_mode", True),
-                cached=candidate_data.get("cached", False),
-                citations=candidate_data.get("citations"),
-                source_str=candidate_data.get("source_str"),
-                custom_instructions=get_custom_instructions(
-                    self.user_id
-                ).evaluation_instructions
-                if get_custom_instructions(self.user_id)
-                else "",
-            )
-        except Exception as e:
-            print(e)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error running candidate evaluation: {str(e)}",
-            )
-
-    async def process_single_candidate(self, candidate_data: dict) -> None:
+    async def process_single_candidate(self, candidate_data: dict, search_mode: bool) -> None:
         """Process a single candidate with evaluation"""
         try:
             logging.info(
@@ -102,8 +72,8 @@ class CandidateProcessor:
                 profile=candidate_data["profile"],
                 number_of_queries=candidate_data.get("number_of_queries", 0),
                 confidence_threshold=candidate_data.get("confidence_threshold", 0.0),
-                search_mode=candidate_data.get("search_mode", True),
-                cached=candidate_data.get("cached", False),
+                search_mode=search_mode,
+                cached=candidate_data.get("cached"),
                 citations=candidate_data.get("citations"),
                 source_str=candidate_data.get("source_str"),
                 custom_instructions=(
@@ -136,9 +106,11 @@ class CandidateProcessor:
                 profile = profile.dict()
 
             # Always update candidate data and create in Firestore
-            update_data = {"profile": profile}
+            update_data = {
+                "profile": profile,
+            }
 
-            if candidate_data.get("search_mode", True):
+            if search_mode:
                 # In search mode, update citations and source_str from graph result
                 update_data.update(
                     {
@@ -166,7 +138,7 @@ class CandidateProcessor:
                 "summary": graph_result["summary"],
                 "required_met": graph_result["required_met"],
                 "optional_met": graph_result["optional_met"],
-                "search_mode": candidate_data.get("search_mode", True),
+                "search_mode": search_mode,
                 "fit": graph_result["fit"],
                 "favorite": False,
             }
@@ -215,7 +187,6 @@ class CandidateProcessor:
                     )
                 else:
                     # Use cached data but preserve search_mode from request
-                    search_mode = candidate_data.get("search_mode", True)
                     candidate_data.update(
                         {
                             "context": cached_candidate["context"],
@@ -225,7 +196,6 @@ class CandidateProcessor:
                             "source_str": cached_candidate["source_str"],
                             "citations": cached_candidate["citations"],
                             "cached": True,
-                            "search_mode": search_mode,
                         }
                     )
                     return candidate_data
@@ -242,8 +212,6 @@ class CandidateProcessor:
                     )
                     return None
 
-                # Preserve search_mode when updating data
-                search_mode = candidate_data.get("search_mode", True)
                 candidate_data.update(
                     {
                         "context": profile.to_context_string(),
@@ -251,7 +219,6 @@ class CandidateProcessor:
                         "profile": profile,
                         "public_identifier": public_id,
                         "cached": False,
-                        "search_mode": search_mode,
                     }
                 )
                 return candidate_data
@@ -266,17 +233,10 @@ class CandidateProcessor:
 
             dummy_id = self.create_dummy_candidate(len(urls))
 
-            # Create all candidate data objects first
-            candidate_data_list = [
-                Candidate(url=url, search_mode=search_mode).model_dump() for url in urls
-            ]
-            for data in candidate_data_list:
-                data["search_mode"] = search_mode
-
             # Process URL fetches concurrently using gather
             fetch_tasks = [
-                run_in_threadpool(lambda d=data: self.get_candidate_record(d))
-                for data in candidate_data_list
+                run_in_threadpool(lambda d={'url': url}: self.get_candidate_record(d))
+                for url in urls
             ]
             candidates = await asyncio.gather(*fetch_tasks)
 
@@ -287,7 +247,7 @@ class CandidateProcessor:
 
             # Process candidates concurrently
             eval_tasks = [
-                self.process_single_candidate(candidate) for candidate in candidates
+                self.process_single_candidate(candidate, search_mode) for candidate in candidates
             ]
             await asyncio.gather(*eval_tasks)
 
@@ -300,7 +260,7 @@ class CandidateProcessor:
     async def reevaluate_candidates(self):
         """Reevaluate all candidates for a job"""
         candidates = firestore.get_candidates(self.job_id, self.user_id)
-        tasks = [self.process_single_candidate(candidate) for candidate in candidates]
+        tasks = [self.process_single_candidate(candidate, search_mode=candidate.get("search_mode", False)) for candidate in candidates]
         await asyncio.gather(*tasks)
 
     def create_dummy_candidate(self, num_urls: int) -> str:

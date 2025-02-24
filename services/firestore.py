@@ -179,21 +179,10 @@ def delete_job(job_id: str, user_id: str) -> bool:
 
 
 def check_cached_candidate_exists(candidate_id: str):
-    """Check if a candidate exists and was updated within the last month"""
+    """Check if a candidate exists"""
     candidate_ref = db.collection("candidates").document(candidate_id)
     doc = candidate_ref.get()
-    if not doc.exists:
-        return False
-
-    candidate_data = doc.to_dict()
-    updated_at = candidate_data.get("updated_at")
-    if not updated_at:
-        return False
-
-    # Create timezone-aware datetime for comparison
-    one_month_ago = datetime.now(UTC) - timedelta(days=30)
-    # Firestore timestamp should already be UTC-aware
-    return updated_at > one_month_ago
+    return doc.exists
 
 
 def add_candidate_to_job(
